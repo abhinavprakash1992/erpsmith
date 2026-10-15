@@ -25,7 +25,8 @@ INSTRUCTIONS = (Path(__file__).parent / "instructions.md").read_text(encoding="u
 
 # Every module that registers tools. Importing one registers its tools; a new tool module goes in this list.
 TOOL_MODULES = ("erpsmith.tools.plan", "erpsmith.tools.records", "erpsmith.memory", "erpsmith.knowledge", "erpsmith.tools.doctype",
-	"erpsmith.tools.scripts", "erpsmith.tools.builders", "erpsmith.tools.debug")
+	"erpsmith.tools.scripts", "erpsmith.tools.builders", "erpsmith.tools.debug",
+	"erpsmith.tools.fixes")
 for _module in TOOL_MODULES:
 	importlib.import_module(_module)
 

@@ -639,5 +639,72 @@
     "title": "Get Scheduler Logs",
     "description": "Returns recent Scheduled Job Log entries, newest first, with each job's status and the end of its details. Use to see whether background jobs run and which fail.",
     "inputSchema": {"type": "object", "properties": {"limit": {"type": "number", "default": 20, "description": "Default 20, at most 200"}}}
+  },
+  {
+    "name": "fix_broken_link",
+    "title": "Fix Broken Link",
+    "description": "Points a Link or Table field that names a missing DocType at the right DocType, by changing the field's options where they live (Custom Field, custom DocType or Property Setter). Use after debug_doctype_fields reports broken_link. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "fieldname", "correctDoctype"],
+      "properties": {"doctype": {"type": "string"}, "fieldname": {"type": "string"}, "correctDoctype": {"type": "string", "description": "The DocType the field should point to"}}
+    }
+  },
+  {
+    "name": "fix_stuck_document",
+    "title": "Fix Stuck Document",
+    "description": "Moves a document stuck in a workflow state that no longer exists to a valid state of its active workflow, without running the transition check, and records the change in the document's timeline. Use after debug_workflow reports stuck_documents. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "docName", "targetState"],
+      "properties": {"doctype": {"type": "string"}, "docName": {"type": "string"}, "targetState": {"type": "string", "description": "A state of the active workflow with the document's docstatus"}}
+    }
+  },
+  {
+    "name": "activate_workflow",
+    "title": "Activate Workflow",
+    "description": "Activates a Workflow so it applies to its DocType's documents; Frappe deactivates the DocType's other workflows, and the result names them. Needs an approved plan from submit_plan.",
+    "inputSchema": {"type": "object", "required": ["workflowName"], "properties": {"workflowName": {"type": "string"}}}
+  },
+  {
+    "name": "fix_permission",
+    "title": "Fix Permission",
+    "description": "Sets a role's permission rule on a DocType, as set_permission does, keeping every other role's rules. Use after debug_permissions reports a missing grant. Needs the System Manager role and an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "role"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "role": {"type": "string"},
+        "permissions": {
+          "type": "object",
+          "description": "1 to grant, 0 to withhold",
+          "properties": {
+            "read": {"type": "number"}, "write": {"type": "number"}, "create": {"type": "number"}, "delete": {"type": "number"},
+            "submit": {"type": "number"}, "cancel": {"type": "number"}, "amend": {"type": "number"}
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "fix_broken_link_value",
+    "title": "Fix Broken Link Value",
+    "description": "Sets a record's Link field, whose linked record was deleted, to an existing record (or clears it with an empty value), saving the record with its usual validation. Use after debug_data_integrity reports broken_link_value. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "recordName", "fieldname", "correctValue"],
+      "properties": {"doctype": {"type": "string"}, "recordName": {"type": "string"}, "fieldname": {"type": "string"}, "correctValue": {"type": "string", "description": "An existing record's name; empty clears the link"}}
+    }
+  },
+  {
+    "name": "fix_missing_required_value",
+    "title": "Fix Missing Required Value",
+    "description": "Sets an empty required field on a record and saves it with its usual validation. Use after debug_data_integrity reports missing_required_value. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "recordName", "fieldname", "value"],
+      "properties": {"doctype": {"type": "string"}, "recordName": {"type": "string"}, "fieldname": {"type": "string"}, "value": {"description": "The value to set"}}
+    }
   }
 ]
