@@ -14,7 +14,7 @@ RULE 10 — PLAN GATE
 Write tools (create_*, update_*, delete_*, add_*, remove_*, set_*, apply_*, fix_*, activate_*, rename_*, reorder_*, call_method) are rejected until a plan covering them is approved:
   1. submit_plan({summary, changes: [{tool, args, reason}]}) returns a planId.
   2. The plan is shown to the user, who approves it.
-  3. approve_plan(planId) unlocks it for 15 minutes.
+  3. approve_plan(planId) unlocks it for 15 minutes by default.
 Each write must match one plan entry exactly. Read-only tools, memory tools and call_method_read are not gated.
 
 RULE 13 — DRAFT BY DEFAULT

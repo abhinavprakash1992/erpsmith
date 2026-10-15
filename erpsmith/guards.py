@@ -13,6 +13,8 @@ from frappe.utils import add_to_date, get_datetime, now_datetime
 MUTATING_PREFIXES = ("create_", "update_", "delete_", "add_", "remove_", "set_", "apply_", "fix_", "activate_", "rename_", "reorder_")
 UNGATED = {"submit_plan", "approve_plan", "get_current_plan", "add_memory", "update_memory", "delete_memory"}
 STATUS = {"Pending Approval": "pending_approval", "Approved": "approved"}
+DEFAULT_TTL_MINUTES = 15
+MAX_TTL_MINUTES = 1440
 
 
 class GateBlocked(Exception):
@@ -54,23 +56,31 @@ def submit_plan(summary, changes):
 
 
 def _own_plan(plan_id):
-	if not frappe.db.exists("MCP Plan", {"name": plan_id, "owner": frappe.session.user}):
+	"""The name of this user's plan `plan_id`. Anything else, including another user's plan, is unknown."""
+	if not isinstance(plan_id, str):
+		raise ValueError("planId must be a string")
+	if frappe.db.get_value("MCP Plan", {"name": plan_id}, "owner") != frappe.session.user:
 		frappe.throw(f"Unknown planId {plan_id}. Call submit_plan first.", frappe.DoesNotExistError)
-	return frappe.get_doc("MCP Plan", plan_id)
+	return plan_id
 
 
-def approve_plan(planId, ttlMinutes=15):
-	plan = _own_plan(planId)
-	plan.status = "Approved"
-	plan.approved_at = now_datetime()
-	plan.expires_at = add_to_date(plan.approved_at, minutes=ttlMinutes)
-	plan.save(ignore_permissions=True)
+def approve_plan(planId, ttlMinutes=DEFAULT_TTL_MINUTES):
+	if ttlMinutes is None:
+		ttlMinutes = DEFAULT_TTL_MINUTES
+	if isinstance(ttlMinutes, bool) or not isinstance(ttlMinutes, (int, float)) or not 1 <= ttlMinutes <= MAX_TTL_MINUTES:
+		raise ValueError(f"ttlMinutes must be a number between 1 and {MAX_TTL_MINUTES}")  # NaN fails the range test too
+	name = _own_plan(planId)
+	approved_at = now_datetime()
+	expires_at = add_to_date(approved_at, minutes=ttlMinutes)
+	# Only the parent row: plan.save() would rewrite every change row from this process's copy, and a stale
+	# consumed=0 would give back a step that a gated call in another worker has just used.
+	frappe.db.set_value("MCP Plan", name, {"status": "Approved", "approved_at": approved_at, "expires_at": expires_at})
 	return {
 		"approved": True,
-		"planId": plan.name,
-		"approvedAt": str(plan.approved_at),
-		"expiresAt": str(plan.expires_at),
-		"changesRemaining": sum(1 for c in plan.changes if not c.consumed),
+		"planId": name,
+		"approvedAt": str(approved_at),
+		"expiresAt": str(expires_at),
+		"changesRemaining": frappe.db.count("MCP Plan Change", {"parent": name, "consumed": 0}),
 	}
 
 

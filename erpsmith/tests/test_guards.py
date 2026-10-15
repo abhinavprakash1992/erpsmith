@@ -1,8 +1,10 @@
 import json
+from datetime import timedelta
 from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_to_date, get_datetime, now_datetime
 
 from erpsmith import guards, mcp
 from erpsmith.guards import DangerousOp, GateBlocked
@@ -69,7 +71,9 @@ class TestPlanGate(FrappeTestCase):
 	def test_unknown_plan_and_expired_approval(self):
 		with self.assertRaisesRegex(frappe.DoesNotExistError, "Unknown planId plan_nope"):
 			guards.approve_plan("plan_nope")
-		guards.approve_plan(plan(("create_record", {"doctype": "Note", "data": {"title": "d"}})), ttlMinutes=0)
+		expiring = plan(("create_record", {"doctype": "Note", "data": {"title": "d"}}))
+		guards.approve_plan(expiring)
+		frappe.db.set_value("MCP Plan", expiring, "expires_at", add_to_date(now_datetime(), minutes=-1))
 		with self.assertRaisesRegex(GateBlocked, "expired"):
 			guards.check_gate("create_record", {"doctype": "Note", "data": {"title": "d"}})
 
@@ -82,6 +86,76 @@ class TestPlanGate(FrappeTestCase):
 		with self.assertRaisesRegex(frappe.DoesNotExistError, f"Unknown planId {admin_plan}"):
 			guards.approve_plan(admin_plan)
 		self.assertEqual(guards.get_current_plan(), {"plan": None})
+
+	def test_reapproving_cannot_unconsume_a_step_another_worker_took(self):
+		# approve_plan used plan.save(), which rewrites every child row from the document it loaded: a re-approval
+		# that read the plan before a gated call consumed its step wrote consumed=0 back and the call could be replayed
+		args = upd("DN-S", "s")
+		plan_id = plan(("update_record", args))
+		guards.approve_plan(plan_id)
+		stale = frappe.get_doc("MCP Plan", plan_id)  # the re-approving worker's read: the step is still unused
+		self.assertFalse(stale.changes[0].consumed)
+		guards.check_gate("update_record", args)  # a gated call, in another worker, uses the step
+		real_get_doc, served = frappe.get_doc, []
+
+		def get_doc(*a, **kw):
+			if a == ("MCP Plan", plan_id) and not kw and not served:
+				served.append(1)
+				return stale
+			return real_get_doc(*a, **kw)
+
+		with patch("frappe.get_doc", get_doc):
+			result = guards.approve_plan(plan_id)
+		self.assertTrue(guards.get_current_plan()["plan"]["changes"][0]["consumed"])
+		self.assertEqual(result["changesRemaining"], 0)
+		with self.assertRaisesRegex(GateBlocked, "does not match"):
+			guards.check_gate("update_record", args)
+
+	def test_approve_plan_returns_the_same_shape_and_marks_the_plan_approved(self):
+		plan_id = plan(("update_record", upd("DN-V", "v")), ("update_record", upd("DN-W", "w")))
+		before = frappe.db.get_value("MCP Plan", plan_id, "modified")
+		r = guards.approve_plan(plan_id)
+		self.assertEqual(sorted(r), ["approved", "approvedAt", "changesRemaining", "expiresAt", "planId"])
+		self.assertEqual((r["approved"], r["planId"], r["changesRemaining"]), (True, plan_id, 2))
+		self.assertEqual(get_datetime(r["expiresAt"]) - get_datetime(r["approvedAt"]), timedelta(minutes=15))
+		row = frappe.db.get_value("MCP Plan", plan_id, ["status", "approved_at", "expires_at", "modified"], as_dict=True)
+		self.assertEqual(row.status, "Approved")
+		self.assertEqual((str(row.approved_at), str(row.expires_at)), (r["approvedAt"], r["expiresAt"]))
+		self.assertGreaterEqual(row.modified, before)
+
+	def test_plan_id_must_be_a_string(self):
+		# a list or dict used to reach the ownership filter and an unfiltered get_doc: ["in", [...]] raised a raw SQL error
+		mine = plan(("update_record", upd("DN-I", "i")))
+		for bad in (["like", "%"], ["in", [mine]], {"name": mine}, 7, 1.5, True, None):
+			with self.subTest(planId=bad):
+				r = mcp.call_tool("approve_plan", {"planId": bad})
+				self.assertTrue(r["isError"])
+				body = json.loads(r["content"][0]["text"])
+				self.assertEqual((body["type"], body["message"]), ("ValueError", "planId must be a string"))
+		for unknown in ("", "%", "plan_nope"):
+			with self.assertRaises(frappe.DoesNotExistError, msg=unknown):
+				guards.approve_plan(unknown)
+		self.assertEqual(frappe.db.get_value("MCP Plan", mine, "status"), "Pending Approval")
+		self.assertTrue(guards.approve_plan(mine)["approved"])
+
+	def test_ttl_minutes_must_be_a_number_from_1_to_1440(self):
+		for ttl in (1, 1.5, 15, 1440, 1440.0):
+			with self.subTest(accepted=ttl):
+				r = guards.approve_plan(plan(("update_record", upd("DN-L", "l"))), ttlMinutes=ttl)
+				self.assertEqual(get_datetime(r["expiresAt"]) - get_datetime(r["approvedAt"]), timedelta(minutes=ttl))
+		for omitted in ({}, {"ttlMinutes": None}):
+			with self.subTest(omitted=omitted):
+				r = guards.approve_plan(plan(("update_record", upd("DN-D", "d"))), **omitted)
+				self.assertEqual(get_datetime(r["expiresAt"]) - get_datetime(r["approvedAt"]), timedelta(minutes=15))
+		for ttl in (0, 0.5, 1441, -5, 1e9, "15", "", True, False, float("nan"), float("inf"), float("-inf"), [15], {"m": 15}):
+			with self.subTest(rejected=ttl):
+				plan_id = plan(("update_record", upd("DN-X", "x")))
+				with self.assertRaisesRegex(ValueError, "^ttlMinutes must be a number between 1 and 1440$"):
+					guards.approve_plan(plan_id, ttlMinutes=ttl)
+				self.assertEqual(frappe.db.get_value("MCP Plan", plan_id, "status"), "Pending Approval")
+		r = mcp.call_tool("approve_plan", {"planId": plan(("update_record", upd("DN-Y", "y"))), "ttlMinutes": "15"})
+		self.assertTrue(r["isError"])
+		self.assertIn("ttlMinutes must be a number", json.loads(r["content"][0]["text"])["message"])
 
 	def test_get_current_plan_shows_consumption(self):
 		plan_id = plan(("update_record", upd("DN-G", "g")))
