@@ -6,6 +6,7 @@ Tools run in-process as the OAuth-authenticated user. Each tool call runs in a
 savepoint, so a failing tool leaves nothing behind.
 """
 
+import importlib
 import json
 from pathlib import Path
 
@@ -14,31 +15,25 @@ from werkzeug.wrappers import Response
 
 import erpsmith
 from erpsmith import guards
+from erpsmith.registry import IMPLS, SCHEMAS, tool  # noqa: F401  re-exported: tests patch mcp.SCHEMAS and mcp.IMPLS
 
 SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
-_HERE = Path(__file__).parent
-SCHEMAS = {t["name"]: t for t in json.loads((_HERE / "tools.json").read_text())}
-INSTRUCTIONS = (_HERE / "instructions.md").read_text()
-IMPLS = {}
+INSTRUCTIONS = (Path(__file__).parent / "instructions.md").read_text(encoding="utf-8")
+
+# Every module that registers tools. Importing one registers its tools; a new tool module goes in this list.
+TOOL_MODULES = ("erpsmith.tools.plan", "erpsmith.tools.records")
+for _module in TOOL_MODULES:
+	importlib.import_module(_module)
+
+# Every schema needs an implementation. The reverse cannot happen: tool() refuses a name that has no schema.
+_missing = set(SCHEMAS) - set(IMPLS)
+if _missing:
+	raise RuntimeError(f"tools.json entries without an implementation: {sorted(_missing)}")
 
 READ_ONLY_PREFIXES = ("get_", "list_", "query_", "search_", "debug_")
 READ_ONLY_EXACT = {"full_health_check", "dump_memory", "call_method_read"}
 DESTRUCTIVE_PREFIXES = ("delete_", "remove_", "update_", "set_", "fix_", "apply_", "rename_", "reorder_", "activate_")
 DESTRUCTIVE_EXACT = {"call_method"}
-
-
-def tool(name):
-	"""Register the implementation of tool `name`; its schema lives in tools.json."""
-
-	def register(fn):
-		if name not in SCHEMAS:
-			raise KeyError(f"{name} has no schema in tools.json")
-		if name in IMPLS:
-			raise ValueError(f"{name} already has an implementation")
-		IMPLS[name] = fn
-		return fn
-
-	return register
 
 
 def annotations(name):
@@ -180,11 +175,3 @@ def handle():
 		return _json(_rpc_error(None, -32700, "Parse error"))
 	reply = dispatch(msg)
 	return Response(status=202) if reply is None else _json(reply)
-
-
-# Tool modules register themselves with @tool on import.
-from erpsmith.tools import plan, records  # noqa: E402, F401
-
-_missing = set(SCHEMAS) - set(IMPLS)
-if _missing:
-	raise RuntimeError(f"tools.json entries without an implementation: {sorted(_missing)}")

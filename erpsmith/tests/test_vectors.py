@@ -9,7 +9,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from erpsmith import vectors
 
-FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "node_embeddings.json").read_text())
+FIXTURE = json.loads((Path(__file__).parent / "fixtures" / "node_embeddings.json").read_text(encoding="utf-8"))
 # Plain ASCII texts match the Node server to cosine 1.0. Non-ASCII and very long texts drift by up to ~0.002 with
 # onnxruntime 1.27+ (see vectors.py), so the bar is 0.995, which a wrong tokenizer, pooling or truncation still misses.
 MIN_COSINE = 0.995

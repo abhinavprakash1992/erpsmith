@@ -3,7 +3,7 @@
 import frappe
 import frappe.client
 
-from erpsmith.mcp import tool
+from erpsmith.registry import tool
 
 MAX_LIMIT = 200
 

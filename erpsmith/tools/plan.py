@@ -1,5 +1,5 @@
 from erpsmith import guards
-from erpsmith.mcp import tool
+from erpsmith.registry import tool
 
 tool("submit_plan")(guards.submit_plan)
 tool("approve_plan")(guards.approve_plan)
