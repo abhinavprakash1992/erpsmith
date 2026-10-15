@@ -27,7 +27,7 @@
   "seed_key": "frappe-submodule-method-chain-rule",
   "topic": "sandbox-rule",
   "title": "`frappe.<submodule>.<method>()` chain rule",
-  "content": "In the sandbox, `frappe.db` exposes a fixed set (get_value, get_all, get_list, set_value, get_single_value, exists, count, escape, sql for reads, get_default; commit/rollback outside DocType Event scripts), and `frappe.utils` exposes a fixed set of date, number and string helpers. Other submodules (`frappe.defaults`, `frappe.permissions`, `frappe.utils.password`) are not available and read as `None`."
+  "content": "In the sandbox, `frappe.db` exposes a fixed set (get_value, get_all, get_list, set_value, get_single_value, exists, count, escape, sql for reads, get_default; commit/rollback outside DocType Event scripts), and `frappe.utils` exposes a fixed set of date, number and string helpers. Other submodules (`frappe.defaults`, `frappe.permissions`, `frappe.utils.password`) are not available; calling their methods fails."
  },
  {
   "seed_key": "frappe-utils-b64encode-is-not-exposed-in-the-sandb",
@@ -39,7 +39,7 @@
   "seed_key": "function-calls-blocked-in-the-server-script-sandbo",
   "topic": "sandbox-rule",
   "title": "Function calls blocked in the server-script sandbox, with working alternatives",
-  "content": "| Blocked | Works instead |\n|---|---|\n| `frappe.get_roles(user)` | `frappe.db.exists(\"Has Role\", {\"parent\": user, \"role\": \"X\"})` |\n| `frappe.set_user()` | Not available |\n| `frappe.logger()` | `frappe.log_error(msg, title)` |\n| `frappe.publish_realtime()` | `frappe.msgprint()` |\n| `hasattr()`, `getattr()` | Direct attribute access or try/except |\n| `str.format()` | `+` concatenation |\n| `frappe.db.commit()` in DocType Event scripts | Not available there; Frappe commits at the end of the request |\n| `frappe.parse_json()` | `json.loads(...)` (json is a global) |\n| `frappe.db.delete()` | `frappe.delete_doc` in a loop over `frappe.get_all(..., pluck=\"name\")` |\n| `frappe.read_file()` | `frappe.get_doc(\"File\", name).get_content()` |\n| `frappe.get_attr()` | Proxied as None |\n| `frappe.get_traceback()` | `str(e)` in except blocks |\n| `frappe.defaults.get_defaults()` | `frappe.db.get_single_value(\"Global Defaults\", \"default_company\")` |\n| `frappe.db.has_column()` | Try/except on the assignment |\n| `frappe.generate_hash()` | `frappe.utils.generate_hash()` |\n| `open()` | Not available |\n| `frappe.request` | `frappe.form_dict` |"
+  "content": "| Blocked | Works instead |\n|---|---|\n| `frappe.get_roles(user)` | `frappe.db.exists(\"Has Role\", {\"parent\": user, \"role\": \"X\"})` |\n| `frappe.set_user()` | Not available |\n| `frappe.logger()` | `frappe.log_error(msg, title)` |\n| `frappe.publish_realtime()` | `frappe.msgprint()` |\n| `hasattr()`, `getattr()` | A missing attribute reads as `None`, so `x.attr is None` works |\n| `str.format()` | `+` concatenation |\n| `frappe.db.commit()` in DocType Event scripts | Not available there; Frappe commits at the end of the request |\n| `frappe.parse_json()` | `json.loads(...)` (json is a global) |\n| `frappe.db.delete()` | `frappe.delete_doc` in a loop over `frappe.get_all(..., pluck=\"name\")` |\n| `frappe.read_file()` | `frappe.get_doc(\"File\", name).get_content()` |\n| `frappe.get_attr()` | Not available (calling it raises AttributeError) |\n| `frappe.get_traceback()` | `str(e)` in except blocks |\n| `frappe.defaults.get_defaults()` | `frappe.db.get_single_value(\"Global Defaults\", \"default_company\")` |\n| `frappe.db.has_column()` | Try/except on the assignment |\n| `frappe.generate_hash()` | `frappe.utils.generate_hash()` |\n| `open()` | Not available |\n| `frappe.request` | `frappe.form_dict` |"
  },
  {
   "seed_key": "imports-raise-importerror-in-server-scripts-frappe",
@@ -81,7 +81,7 @@
   "seed_key": "what-does-work-in-server-scripts",
   "topic": "sandbox-rule",
   "title": "What does work in server scripts",
-  "content": "- `frappe.form_dict.get()`, `frappe.throw()`, `frappe.msgprint()`\n- `frappe.get_doc()`, `frappe.db.get_value()`, `frappe.db.set_value()`, `frappe.db.count()`, `frappe.db.exists()`\n- `frappe.new_doc()` + `.insert()` + `.submit()`\n- `frappe.utils.flt()`, `frappe.utils.cstr()`, `frappe.utils.today()`, `frappe.utils.now()`, `frappe.utils.now_datetime()`, `frappe.utils.add_days()`, `frappe.utils.get_timestamp()`\n- `frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)` — single-row delete\n- `frappe.utils.generate_hash()` (`frappe.generate_hash` is not exposed)\n- `frappe.session.user`\n- `frappe.response[\"message\"] = ...`\n- `frappe.utils.getdate()` / `get_datetime()` (datetime is not in scope)\n- `try/except Exception:` (generic Exception only)\n- All dict/list/string built-in methods, basic loops, comprehensions\n- `frappe.make_get_request`, `frappe.make_post_request` — on `frappe` directly, not `frappe.utils`"
+  "content": "- `frappe.form_dict.get()`, `frappe.throw()`, `frappe.msgprint()`\n- `frappe.get_doc()`, `frappe.db.get_value()`, `frappe.db.set_value()`, `frappe.db.count()`, `frappe.db.exists()`\n- `frappe.new_doc()` + `.insert()` + `.submit()`\n- `frappe.utils.flt()`, `frappe.utils.cstr()`, `frappe.utils.today()`, `frappe.utils.now()`, `frappe.utils.now_datetime()`, `frappe.utils.add_days()`, `frappe.utils.get_timestamp()`\n- `frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)` — single-row delete\n- `frappe.utils.generate_hash()` (`frappe.generate_hash` is not exposed)\n- `frappe.session.user`\n- `frappe.response[\"message\"] = ...`\n- `frappe.utils.getdate()` / `get_datetime()` (datetime is not in scope)\n- `try/except` with specific or generic exception classes\n- All dict/list/string built-in methods, basic loops, comprehensions\n- `frappe.make_get_request`, `frappe.make_post_request` — on `frappe` directly, not `frappe.utils`"
  },
  {
   "seed_key": "what-the-frappe-server-script-runtime-accepts-f-st",
@@ -165,7 +165,7 @@
   "seed_key": "re-runnable-operations-one-parent-document-per-bat",
   "topic": "pattern",
   "title": "Re-runnable operations: one parent document per batch",
-  "content": "Bulk-clearing child rows from a server script is awkward, so one parent document per operation keeps batches separate. A check at script entry blocks re-runs:\n\n```python\nif doc.status in (\"Mapped\", \"Processed\", \"Completed\"):\n    frappe.throw(\"Already processed. Please create a new document.\")\n```"
+  "content": "One parent document per operation keeps each batch and its rows separate, so running the operation again means creating a new document. A check at script entry blocks re-runs of a finished one:\n\n```python\nif doc.status in (\"Mapped\", \"Processed\", \"Completed\"):\n    frappe.throw(\"Already processed. Please create a new document.\")\n```"
  },
  {
   "seed_key": "reading-uploaded-files-from-a-server-script",
@@ -195,7 +195,7 @@
   "seed_key": "webhook-handler-reading-the-post-body",
   "topic": "pattern",
   "title": "Webhook handler: reading the POST body",
-  "content": "`frappe.request` returns None in the sandbox. `frappe.form_dict` holds the parsed body:\n```python\npayload = frappe.form_dict\nevent = payload.get(\"event\", \"\")\n```"
+  "content": "`frappe.request` in the sandbox is a stub (`{'path': ...}`) without the body, so the POST body is read from `frappe.form_dict`, which holds the parsed body:\n```python\npayload = frappe.form_dict\nevent = payload.get(\"event\", \"\")\n```"
  },
  {
   "seed_key": "background-job-monitor-left-successful-jobs-stuck",

@@ -94,7 +94,7 @@ The top hit is the sandbox-rule note on imports on both versions. `test_seed_con
 ## Deviations from the plan
 
 - Plan 1's record tool descriptions were too terse for the new lint: `create_record` (31 characters), `get_record` (37) and `delete_record` (33) fall under its 40-character floor, and `update_record` (41) and `query_records` (44) only just clear it. All five were reworded in `tools.json` in descriptive voice, naming the signed-in user's permissions and, for the three write tools, the approved plan they need. No tool name, schema or argument changed.
-- `instructions.md` needed no edit: RULE 0 is true against the 15 registered tools (both memory and knowledge tools exist, the System Manager sentence is there, `add_memory` saves a note). Plan 3 items (RULE 1 sanitizer, RULE 13 drafts, RULE 16 over-claims, the `call_method_read` mention) are untouched.
+- `instructions.md` needed no edit for the memory and knowledge tools: RULE 0 is true against the 15 registered tools (both memory and knowledge tools exist, the System Manager sentence is there, `add_memory` saves a note). Task 12 corrected RULE 1's claim that `datetime` is available (see "Seed memory"); the other Plan 3 items (RULE 1 sanitizer, RULE 13 drafts, RULE 16 over-claims, the `call_method_read` mention) are untouched.
 - Task 12: the owner approved every candidate in the include and review buckets. 5 of those 46 were dropped while rewording because they could not be made generic, and 5 more in review because their sandbox claims are false (see "Seed memory" above). Approved notes carry new `seed_key` values derived from their reworded titles, because the original keys came from titles with dates and integration names.
 
 ## For Plan 3 / 4
