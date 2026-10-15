@@ -1,0 +1,5 @@
+[
+ {"id": "sandbox-rule__imports-are-blocked__20260101100000", "topic": "sandbox-rule", "title": "Imports are blocked", "content": "Any import raises ImportError in a server script.", "created_at": "2026-01-01T10:00:00.000Z"},
+ {"id": "pattern__rupee-amounts__20260102100000", "topic": "pattern", "title": "₹ amounts and 🚚 emoji", "content": "Format 50,000 as a string before concatenating; keep the symbol in the label.", "created_at": "2026-01-02T10:00:00.000Z"},
+ {"id": "bug-fix__rename-doc__20260103100000", "topic": "bug-fix", "title": "rename_doc is blocked", "content": "Rename through the Desk or a whitelisted method.", "created_at": "2026-01-03T10:00:00.000Z"}
+]

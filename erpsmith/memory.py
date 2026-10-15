@@ -6,7 +6,9 @@ A note is one MCP Memory row, shared by every user of the site. The DocType cont
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import frappe
 from frappe.utils import get_datetime, now_datetime
@@ -203,3 +205,46 @@ def load_seeds(path=None):
 	if todo:
 		frappe.db.set_default(APPLIED_DEFAULT, json.dumps(sorted(applied)))
 	return {"inserted": inserted, "already_present": present}
+
+
+def _utc_to_site(stamp):
+	"""'2026-06-22T06:40:43.101Z' (UTC, as the Node server wrote it) as the site's local naive datetime, the way Frappe stores `creation`."""
+	if not stamp:
+		return None
+	moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+	if moment.tzinfo is None:
+		raise ValueError(f"created_at {stamp!r} has no time zone")
+	return moment.astimezone(ZoneInfo(frappe.utils.get_system_timezone())).replace(tzinfo=None)
+
+
+def import_json(path):
+	"""Import notes exported from the Node server by dev/export-node-memory.mjs, keeping their ids and dates.
+
+	    bench --site <site> execute erpsmith.memory.import_json --kwargs "{'path': '/workspace/erpsmith/private/node-memory.json'}"
+
+	Everything is embedded in this one process, so the model loads once. Does not commit: bench execute does."""
+	entries = json.loads(Path(path).read_text(encoding="utf-8"))
+	if not isinstance(entries, list):
+		raise ValueError("an export is a JSON list of notes")
+	imported, present, rejected = 0, 0, []
+	for entry in entries:
+		note_id = entry.get("id") if isinstance(entry, dict) else None
+		frappe.db.savepoint("import_note")
+		try:
+			if not isinstance(entry, dict):
+				raise TypeError("expected an object")
+			if not isinstance(note_id, str) or not note_id:
+				raise ValueError("every note needs an id")
+			created = _utc_to_site(entry.get("created_at"))
+			if frappe.db.exists(DOCTYPE, note_id):
+				present += 1
+				continue
+			frappe.get_doc({"doctype": DOCTYPE, "name": note_id, "topic": entry["topic"], "title": entry["title"],
+				"content": entry["content"]}).insert(ignore_permissions=True)
+			if created:
+				frappe.db.set_value(DOCTYPE, note_id, "creation", created, update_modified=False)
+			imported += 1
+		except Exception as e:  # one bad note must not stop the rest
+			frappe.db.rollback(save_point="import_note")
+			rejected.append({"id": note_id, "reason": f"{type(e).__name__}: {e}"})
+	return {"imported": imported, "already_present": present, "rejected": rejected}
