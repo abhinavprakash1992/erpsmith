@@ -28,6 +28,8 @@ The queries are the ten in `dev/parity-queries.json`. Each was kept only if the 
 
 **Mutation check.** With the L2 normalisation removed from `vectors.embed` the same test fails on both benches (8 of 10 queries come back `DIFF`, max score diffs 4 to 17), so the comparison can fail. The edit was reverted before this run.
 
+The parity test skips wherever `private/` is absent (CI and other machines), so an onnxruntime upgrade needs a manual re-run of `erpsmith.tests.test_parity`.
+
 **onnxruntime decision: no cap.** Every query matches on onnxruntime 1.31.0, the version that pip installs on both benches, so `pyproject.toml` keeps `onnxruntime>=1.20`. The planning spike also found the same top 3 on 1.23.2. The criterion is met without restricting the runtime, so no cap is applied.
 
 ## Drift context
@@ -45,7 +47,7 @@ Real builds on 2026-10-15 with `bench --site testNN.localhost execute erpsmith.k
 | v16 | first | 2,686 | 0 | 0 | 0 | 888 pages | 3m32s |
 | v16 | second | 0 | 0 | 2,686 | 0 | 888 pages | 2.1s |
 
-No skips: the manual line reads `888 pages` on all four runs. The stored chunks split into 275 `doctype` and 2,385 `manual` on v15 (v16 has 26 more chunks, from its additional stock DocTypes). The second build reads every DocType and re-fetches the manual yet finishes in about 2 s, and every chunk is hash-skipped, so a re-run is cheap. The chunks stay in the dev sites' databases.
+No skips: the manual line reads `888 pages` on all four runs. The stored chunks split into 275 `doctype` and 2,385 `manual` on v15 (v16 has 26 more chunks; the split by kind was not recorded on v16, so which kind they belong to is not measured). The second build reads every DocType and re-fetches the manual yet finishes in about 2 s, and every chunk is hash-skipped, so a re-run is cheap. The chunks stay in the dev sites' databases.
 
 ## Retrieval cases
 
@@ -63,12 +65,12 @@ HIT  manual Delivery Note <- create a delivery note from a sales order ['Deliver
 
 Peak RSS of the probe process (`resource.getrusage`), measured around the first knowledge search (model load plus cache build over the stored chunks), and wall time of searches after that:
 
-| Bench | RSS before | RSS after first search | First knowledge search | Warm memory search | Warm knowledge search |
+| Bench | RSS before | RSS after first search | First knowledge search | First memory search (includes building the memory cache) | Warm knowledge search |
 |---|---|---|---|---|---|
 | v15 | 74 MB | 176 MB | 0.56 s | 49 ms | 8 ms |
 | v16 | 92 MB | 209 MB | 0.48 s | 30 ms | 6 ms |
 
-The first search adds 102 MB (v15) and 117 MB (v16) of peak RSS, more than the roughly 75 MB expected for the model alone: the rest is the cached vectors for about 2,700 chunks plus the tokenizer and the matrix copy. Warm searches are well under the "low tens of milliseconds" bar for knowledge; the memory search is 30 to 49 ms because the memory cache is built on its first use in the process.
+The first search adds 102 MB (v15) and 117 MB (v16) of peak RSS, more than the roughly 75 MB expected for the model alone. The cached vectors do not explain the difference (2,700 x 384 float32 is about 4 MB); the cause beyond the model was not isolated, and onnxruntime's arena and session overhead is the likely part. All timings are single samples and the RSS figures are peak RSS (`resource.getrusage`), so read them as orders of magnitude. Warm knowledge searches are well under the "low tens of milliseconds" bar; the memory search figure is the first memory search in the process, so it includes building the memory cache and is not a warm timing.
 
 ## Deviations from the plan
 

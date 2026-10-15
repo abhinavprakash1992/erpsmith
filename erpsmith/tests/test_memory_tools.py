@@ -76,6 +76,8 @@ class TestMemoryTools(FrappeTestCase):
 			self.assertEqual(out["count"], want, given)
 		self.assertEqual(memory.clamp("topK", 1e9, 5, 1, 20), 20)
 		self.assertEqual(memory.clamp("limit", None, 20, 1, 100), 20)
+		self.assertEqual(memory.clamp("topK", 10**400, 5, 1, 20), 20)  # float() overflows
+		self.assertEqual(memory.clamp("topK", -(10**400), 5, 1, 20), 1)
 		for bad in (True, "abc", [], float("nan")):
 			err, out = call("search_memory", {"query": "import", "topK": bad})
 			self.assertTrue(err, bad)
@@ -109,6 +111,14 @@ class TestMemoryTools(FrappeTestCase):
 			self.assertTrue(err, name)
 			self.assertEqual(out["type"], "DoesNotExistError", name)
 			self.assertIn('No memory with id "nope"', out["message"], name)
+			self.assertIn("list_memory", out["suggestion"], name)
+
+	def test_update_memory_with_nothing_to_change_is_refused(self):
+		note_id = add_all()[0]
+		err, out = call("update_memory", {"id": note_id})
+		self.assertTrue(err)
+		self.assertEqual(out["type"], "InvalidArguments")
+		self.assertIn("new title, new content, or both", out["message"])
 
 	def test_list_memory_orders_newest_first_and_counts(self):
 		ids = add_all()

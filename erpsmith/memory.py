@@ -45,6 +45,8 @@ def clamp(name, value, default, low, high):
 		return default
 	try:
 		number = float(value)
+	except OverflowError:  # an int too big for a float, such as 10**400
+		return high if value > 0 else low
 	except (TypeError, ValueError):
 		raise InvalidArguments(f"{name} must be a number") from None
 	if isinstance(value, bool) or number != number:  # True is not a count; NaN is not a number
@@ -106,6 +108,8 @@ def add_memory(topic, title, content):
 def update_memory(id, content=None, title=None):  # noqa: A002  the argument name is part of the tool's schema
 	id = required_text("id", id)
 	title, content = _optional_text("title", title), _optional_text("content", content)
+	if title is None and content is None:
+		raise InvalidArguments("pass a new title, new content, or both")
 	frappe.has_permission(DOCTYPE, "write", throw=True)
 	_must_exist(id)
 	doc = frappe.get_doc(DOCTYPE, id)
@@ -141,6 +145,7 @@ def list_memory(topic=None, limit=20):
 @tool("dump_memory")
 def dump_memory(path=None):  # `path` is accepted for old callers and ignored: nothing is written on the server
 	frappe.has_permission(DOCTYPE, "read", throw=True)
+	# ponytail: no row or size cap (the Node server capped it at 10,000 rows); add one if a site's memory grows large
 	rows = frappe.get_all(DOCTYPE, fields=["name", "topic", "title", "content", "creation"], order_by="creation asc, name asc")
 	parts = [f"# Memory Export\n\nGenerated from the memory table. {len(rows)} entries. The table is canonical; "
 		"edits to this text are not read back unless re-imported.\n"]
@@ -154,7 +159,7 @@ def dump_memory(path=None):  # `path` is accepted for old callers and ignored: n
 
 SEED_PATH = Path(__file__).with_name("seed_memory.json")
 APPLIED_DEFAULT = "erpsmith_seeds_applied"
-SEED_KEY = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}$")
+SEED_KEY = re.compile(r"[a-z0-9][a-z0-9-]{0,60}")  # used with fullmatch: "$" would accept a trailing newline
 
 
 def check_seeds(seeds):
@@ -166,7 +171,7 @@ def check_seeds(seeds):
 		if not isinstance(seed, dict) or set(seed) != {"seed_key", "topic", "title", "content"}:
 			raise ValueError(f"seed {i}: expected exactly seed_key, topic, title and content")
 		key = seed["seed_key"]
-		if not isinstance(key, str) or not SEED_KEY.match(key):
+		if not isinstance(key, str) or not SEED_KEY.fullmatch(key):
 			raise ValueError(f"seed {i}: bad seed_key {key!r} (lowercase letters, digits and dashes)")
 		if key in keys:
 			raise ValueError(f"seed {i}: duplicate seed_key {key!r}")

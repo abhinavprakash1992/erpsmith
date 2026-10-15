@@ -37,7 +37,7 @@ class TestMemoryParity(FrappeTestCase):
 			want = ref["top3"]
 			same_order = [r["id"] for r in got] == [w["id"] for w in want]
 			same_set = {r["id"] for r in got} == {w["id"] for w in want}
-			delta = max(abs(r["score"] - w["score"]) for r, w in zip(got, want))
+			delta = max((abs(r["score"] - w["score"]) for r, w in zip(got, want)), default=float("inf"))
 			report.append(f"{'SAME' if same_order else ('SET ' if same_set else 'DIFF')}  max score diff {delta:.4f}  {ref['query']}")
 			if not same_order:
 				wrong.append(ref["query"])

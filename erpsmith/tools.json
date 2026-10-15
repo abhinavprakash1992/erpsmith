@@ -83,7 +83,7 @@
   {
     "name": "query_records",
     "title": "Query Records",
-    "description": "Returns a list of records from any DocType, filtered and limited, as the signed-in user. Use to look up or count records.",
+    "description": "Returns a list of records from any DocType, filtered and limited, as the signed-in user. Use to look up records; at most 200 rows come back.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype"],

@@ -23,6 +23,7 @@ from redis.exceptions import RedisError
 from erpsmith import vectors
 
 _snapshots = {}  # (site, doctype, fields) -> Snapshot
+# ponytail: one entry per (site, doctype, fields) a worker serves, never evicted: fine for a few sites; add an LRU if a worker serves many
 _lock = threading.Lock()  # ponytail: one lock for every table; per-table locks if rebuilds ever queue up
 
 

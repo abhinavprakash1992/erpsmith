@@ -74,6 +74,8 @@ def suggestion(e):
 	if isinstance(e, frappe.PermissionError):
 		return ("The signed-in ERPNext user lacks this permission. Tools run with that user's roles; "
 			"ask an administrator to grant the role.")
+	if isinstance(e, frappe.DoesNotExistError) and msg.startswith("No memory with id"):
+		return "No note has that id. The ids of existing notes are shown by list_memory and search_memory."
 	if isinstance(e, frappe.DoesNotExistError):
 		return "Not found. Check the DocType and name with get_doctype or query_records."
 	if isinstance(e, frappe.DuplicateEntryError):

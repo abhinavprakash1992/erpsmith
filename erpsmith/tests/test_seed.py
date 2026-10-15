@@ -61,7 +61,7 @@ class TestSeedLoader(FrappeTestCase):
 		good = {"seed_key": "ok-key", "topic": "pattern", "title": "t", "content": "c"}
 		bad = [
 			"not a list", [{"seed_key": "a"}], [{**good, "extra": 1}], [{**good, "seed_key": "Bad Key"}],
-			[good, good], [{**good, "topic": "nope"}], [{**good, "title": "  "}],
+			[good, good], [{**good, "seed_key": "ok-key\n"}], [{**good, "topic": "nope"}], [{**good, "title": "  "}],
 			[{**good, "content": "c" * (memory.MAX_CONTENT_CHARS + 1)}],
 		]
 		for seeds in bad:
