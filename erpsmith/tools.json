@@ -577,5 +577,67 @@
         "timeSeries": {"type": "boolean", "description": "Accepted for compatibility; charts without groupBy are always time series"}
       }
     }
+  },
+  {
+    "name": "full_health_check",
+    "title": "Full Health Check",
+    "description": "Runs every check on one DocType at once (fields, client scripts, server scripts, permissions and its workflow) and returns each check's issues and suggested fixes. Use as the first step when a DocType misbehaves.",
+    "inputSchema": {"type": "object", "required": ["doctype"], "properties": {"doctype": {"type": "string"}}}
+  },
+  {
+    "name": "debug_client_script",
+    "title": "Debug Client Script",
+    "description": "Checks a Client Script, or every client script of a DocType, for a missing frappe.ui.form.on wrapper, unbalanced braces, handlers without frm, deprecated APIs, console.log and disabled state, with fixes where one is mechanical.",
+    "inputSchema": {"type": "object", "required": ["nameOrDoctype"], "properties": {"nameOrDoctype": {"type": "string", "description": "A Client Script name, or a DocType to check all of its client scripts"}}}
+  },
+  {
+    "name": "debug_server_script",
+    "title": "Debug Server Script",
+    "description": "Checks a Server Script, or every server script of a DocType, against the sandbox's real limits and for mixed indentation, raw SQL, empty frappe.throw, bare except, recent Error Log entries from it and disabled state; also reports when the bench has server scripts turned off.",
+    "inputSchema": {"type": "object", "required": ["nameOrDoctype"], "properties": {"nameOrDoctype": {"type": "string", "description": "A Server Script name, or a DocType to check all of its server scripts"}}}
+  },
+  {
+    "name": "debug_doctype_fields",
+    "title": "Debug DocType Fields",
+    "description": "Checks a DocType's fields for Link and Table fields pointing at missing DocTypes, empty Select options, depends_on conditions naming missing fields, broken Dynamic Links, duplicate or invalid fieldnames, and a submittable DocType nobody may submit.",
+    "inputSchema": {"type": "object", "required": ["doctype"], "properties": {"doctype": {"type": "string"}}}
+  },
+  {
+    "name": "debug_workflow",
+    "title": "Debug Workflow",
+    "description": "Checks a Workflow for being inactive, missing states or transitions, transitions to undefined states, unreachable states, actions open to every user, and draft documents stuck in a state the workflow no longer has.",
+    "inputSchema": {"type": "object", "required": ["doctypeOrWorkflow"], "properties": {"doctypeOrWorkflow": {"type": "string", "description": "A Workflow name, or a DocType to check its workflow"}}}
+  },
+  {
+    "name": "debug_permissions",
+    "title": "Debug Permissions",
+    "description": "Checks the permission rules in force on a DocType (Custom DocPerm rows replace its own once any exist) for a DocType nobody can open, a submittable DocType nobody may submit, rules that are all read-only, and optionally what one role may do.",
+    "inputSchema": {"type": "object", "required": ["doctype"], "properties": {"doctype": {"type": "string"}, "role": {"type": "string", "description": "Check this role's access as well"}}}
+  },
+  {
+    "name": "debug_data_integrity",
+    "title": "Debug Data Integrity",
+    "description": "Scans a DocType's most recent records for empty required fields and Link values whose linked record no longer exists. Reads up to limit records (default 50, at most 200) and reports at most 100 issues.",
+    "inputSchema": {"type": "object", "required": ["doctype"], "properties": {"doctype": {"type": "string"}, "limit": {"type": "number", "description": "How many recent records to scan (default 50, at most 200)"}}}
+  },
+  {
+    "name": "get_error_logs",
+    "title": "Get Error Logs",
+    "description": "Returns recent Error Log entries, newest first, filtered by method name, DocType or date, with the end of each traceback. Use to find what has been failing on the server.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "method": {"type": "string", "description": "Part of the method or job name"},
+        "doctype": {"type": "string"},
+        "since": {"type": "string", "description": "Only entries after this date, e.g. 2024-03-01"},
+        "limit": {"type": "number", "description": "Default 20, at most 200"}
+      }
+    }
+  },
+  {
+    "name": "get_scheduler_logs",
+    "title": "Get Scheduler Logs",
+    "description": "Returns recent Scheduled Job Log entries, newest first, with each job's status and the end of its details. Use to see whether background jobs run and which fail.",
+    "inputSchema": {"type": "object", "properties": {"limit": {"type": "number", "default": 20, "description": "Default 20, at most 200"}}}
   }
 ]
