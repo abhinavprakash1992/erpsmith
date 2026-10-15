@@ -44,6 +44,14 @@ class TestBuildSeed(FrappeTestCase):
 			self.assertIn("bad", done.stderr)
 			self.assertIsNone(seeds, text)  # nothing is written when any note fails
 
+	def test_a_bad_key_or_an_oversized_note_stops_the_build(self):
+		for key, values in (("bad-key\n", {}), ("Bad-Key", {}), ("long-title", {"title": "t" * (memory.MAX_TITLE_CHARS + 1)}),
+				("long-content", {"content": "Frappe saves rows. " * 1100})):
+			done, seeds = self.run_script([candidate("ok"), candidate(key, **values)])
+			self.assertNotEqual(done.returncode, 0, key)
+			self.assertIn(key.strip(), done.stderr)
+			self.assertIsNone(seeds, key)
+
 	def test_nothing_approved_is_an_error(self):
 		done, seeds = self.run_script([candidate("x", approved=False)])
 		self.assertNotEqual(done.returncode, 0)

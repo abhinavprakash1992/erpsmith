@@ -33,5 +33,4 @@ class TestShippedSeed(FrappeTestCase):
 		memory.load_seeds()
 		top = memory.search_memory("can I import json in a server script")["results"][0]
 		self.assertEqual(top["topic"], "sandbox-rule")
-		self.assertTrue(top["id"].startswith("seed__"), top["id"])
-		self.assertIn("import", f"{top['title']} {top['content']}".lower())
+		self.assertEqual(top["id"], "seed__imports-raise-importerror-in-server-scripts-frappe")

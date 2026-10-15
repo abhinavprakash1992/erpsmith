@@ -19,7 +19,8 @@ sys.path.insert(0, str(ROOT))
 from erpsmith.tests import seed_rules  # noqa: E402  standard library only
 
 TOPIC_ORDER = ("sandbox-rule", "pattern", "bug-fix", "context", "handoff")
-SEED_KEY = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}$")  # the same rule as erpsmith.memory.SEED_KEY; the tests compare the output
+SEED_KEY = re.compile(r"[a-z0-9][a-z0-9-]{0,60}")  # erpsmith.memory.SEED_KEY, used with fullmatch ("$" accepts a trailing newline)
+MAX_TITLE_CHARS, MAX_CONTENT_CHARS = 140, 20_000  # erpsmith.memory's limits; this script runs without Frappe
 
 
 def main():
@@ -43,8 +44,10 @@ def main():
 		found = seed_rules.hard_violations(f"{c['title']}\n{c['content']}", blocklist)
 		if found:
 			problems.append(f"{c['seed_key']}: {', '.join(found)}")
-		if not SEED_KEY.match(c["seed_key"]) or c["topic"] not in TOPIC_ORDER:
+		if not SEED_KEY.fullmatch(c["seed_key"]) or c["topic"] not in TOPIC_ORDER:
 			problems.append(f"{c['seed_key']}: bad key or topic")
+		if len(c["title"].strip()) > MAX_TITLE_CHARS or len(c["content"].strip()) > MAX_CONTENT_CHARS:
+			problems.append(f"{c['seed_key']}: title over {MAX_TITLE_CHARS} or content over {MAX_CONTENT_CHARS} characters")
 	if len({c["seed_key"] for c in approved}) != len(approved):
 		problems.append("duplicate seed_key among the approved notes")
 	if problems:

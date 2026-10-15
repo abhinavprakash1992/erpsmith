@@ -85,7 +85,7 @@ def suggestion(e):
 	if isinstance(e, frappe.ValidationError):
 		return "Validation failed. Check required fields and allowed values with get_doctype."
 	if "__import__" in msg or "ImportError" in msg:
-		return "The script sandbox blocks all imports. Remove every import; frappe, json and datetime are already available. See RULE 1."
+		return "The script sandbox blocks all imports. Remove every import; frappe and json are already available, and date helpers live in frappe.utils. See RULE 1."
 	if "not whitelisted" in msg:
 		return "That method is not whitelisted, so it cannot be called. Check the dotted path."
 	if isinstance(e, TypeError):

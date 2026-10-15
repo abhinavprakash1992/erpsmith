@@ -8,7 +8,7 @@ search_memory finds this site's saved reference notes by meaning: Frappe sandbox
 search_erpnext_knowledge covers this site's DocType structure (custom fields included) and the ERPNext user manual. add_memory saves a new fact, fix or pattern for next time. Memory is shared by every user of the site and needs the System Manager role.
 
 RULE 1 — NO PYTHON IMPORTS IN SERVER SCRIPTS
-Server and API scripts run in RestrictedPython: every import raises ImportError, and frappe, json and datetime are already available. Many other calls are blocked at runtime or by ERPSmith's script sanitizer. search_memory("banned function calls server script") lists them with sandbox-safe replacements.
+Server and API scripts run in RestrictedPython: every import raises ImportError, and frappe and json are already available (date helpers live in frappe.utils). Many other calls are blocked at runtime or by ERPSmith's script sanitizer. search_memory("banned function calls server script") lists them with sandbox-safe replacements.
 
 RULE 10 — PLAN GATE
 Write tools (create_*, update_*, delete_*, add_*, remove_*, set_*, apply_*, fix_*, activate_*, rename_*, reorder_*, call_method) are rejected until a plan covering them is approved:
