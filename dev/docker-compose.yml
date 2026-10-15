@@ -1,0 +1,45 @@
+name: erpsmith
+services:
+  mariadb:
+    image: docker.io/mariadb:10.6
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: "123"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+  redis-cache:
+    image: docker.io/redis:alpine
+  redis-queue:
+    image: docker.io/redis:alpine
+  # Benches live in the container filesystem: `docker compose down` deletes them
+  # (re-run setup-bench.sh); `stop`/`start` keeps them.
+  bench15:
+    image: docker.io/frappe/bench:latest
+    command: sleep infinity
+    volumes:
+      - ..:/workspace/erpsmith
+    ports:
+      - "8015:8000"
+    depends_on: [mariadb, redis-cache, redis-queue]
+  bench16:
+    image: docker.io/frappe/bench:latest
+    command: sleep infinity
+    volumes:
+      - ..:/workspace/erpsmith
+    ports:
+      - "8016:8000"
+    depends_on: [mariadb, redis-cache, redis-queue]
+  tunnel15:
+    image: docker.io/cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://bench15:8000
+    profiles: [tunnel]
+  tunnel16:
+    image: docker.io/cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://bench16:8000
+    profiles: [tunnel]
+volumes:
+  mariadb-data:

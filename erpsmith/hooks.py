@@ -1,0 +1,6 @@
+app_name = "erpsmith"
+app_title = "ERPSmith"
+app_publisher = "Abhinav Prakash"
+app_description = "AI dev copilot for ERPNext"
+app_email = "abhinav.prakash1992@gmail.com"
+app_license = "mit"
