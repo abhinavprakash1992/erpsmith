@@ -24,7 +24,8 @@ SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 INSTRUCTIONS = (Path(__file__).parent / "instructions.md").read_text(encoding="utf-8")
 
 # Every module that registers tools. Importing one registers its tools; a new tool module goes in this list.
-TOOL_MODULES = ("erpsmith.tools.plan", "erpsmith.tools.records", "erpsmith.memory", "erpsmith.knowledge", "erpsmith.tools.doctype")
+TOOL_MODULES = ("erpsmith.tools.plan", "erpsmith.tools.records", "erpsmith.memory", "erpsmith.knowledge", "erpsmith.tools.doctype",
+	"erpsmith.tools.scripts")
 for _module in TOOL_MODULES:
 	importlib.import_module(_module)
 
@@ -63,6 +64,8 @@ def suggestion(e):
 		return "This operation is blocked even with an approved plan; the error names the safe alternative. See RULE 16."
 	if msg.startswith("Unknown tool"):
 		return "tools/list shows the available tools."
+	if msg.startswith("Server scripts are disabled"):
+		return "Only a bench administrator can enable server scripts; the message gives the command."
 	if "is a standard DocType" in msg:
 		return "The error names the upgrade-safe tools that change a standard DocType."
 	if "not whitelisted" in msg:

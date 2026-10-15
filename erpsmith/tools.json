@@ -345,5 +345,91 @@
         "value": {"description": "New value"}
       }
     }
+  },
+  {
+    "name": "create_client_script",
+    "title": "Create Client Script",
+    "description": "Creates a Client Script: JavaScript that runs in the browser on a DocType's form or list view, e.g. frappe.ui.form.on('DocType', { field_name(frm) { frm.set_value(...) } }). Use to auto-fill, validate, show or hide fields on the form. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "script"],
+      "properties": {
+        "name": {"type": "string", "description": "Script name (default '<doctype> <scriptType> Script')"},
+        "doctype": {"type": "string"},
+        "scriptType": {"type": "string", "enum": ["Form", "List"], "default": "Form", "description": "The view it runs on"},
+        "script": {"type": "string", "description": "Full JavaScript code"},
+        "enabled": {"type": "boolean", "default": true}
+      }
+    }
+  },
+  {
+    "name": "update_client_script",
+    "title": "Update Client Script",
+    "description": "Replaces a Client Script's code, or enables or disables it. Needs an approved plan from submit_plan.",
+    "inputSchema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "script": {"type": "string"}, "enabled": {"type": "boolean"}}}
+  },
+  {
+    "name": "list_client_scripts",
+    "title": "List Client Scripts",
+    "description": "Lists Client Scripts with their DocType, view and enabled state, optionally for one DocType. At most 100 come back, newest first.",
+    "inputSchema": {"type": "object", "properties": {"doctype": {"type": "string"}}}
+  },
+  {
+    "name": "get_client_script",
+    "title": "Get Client Script",
+    "description": "Returns a Client Script's full JavaScript with its DocType, view and enabled state. Use before changing or debugging it.",
+    "inputSchema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+  },
+  {
+    "name": "create_server_script",
+    "title": "Create Server Script",
+    "description": "Creates a Server Script: Python run by Frappe's sandbox on a DocType event, as an API method at /api/method/<apiMethod>, on a schedule, or as a permission query. The script is checked against the sandbox's limits before it is saved, and each problem comes back with a working replacement. Needs server scripts enabled on the bench and an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["name", "scriptType", "script"],
+      "properties": {
+        "name": {"type": "string"},
+        "scriptType": {"type": "string", "enum": ["DocType Event", "API", "Scheduler Event", "Permission Query"]},
+        "doctype": {"type": "string", "description": "The DocType, for DocType Event and Permission Query"},
+        "event": {"type": "string", "enum": ["Before Insert", "Before Validate", "Before Save", "After Insert", "After Save", "Before Submit", "After Submit", "Before Cancel", "After Cancel", "Before Delete", "After Delete", "Before Rename", "After Rename", "Before Save (Submitted Document)", "After Save (Submitted Document)"], "description": "For DocType Event"},
+        "apiMethod": {"type": "string", "description": "For API: the method name, served at /api/method/<apiMethod>"},
+        "cronExpression": {"type": "string", "enum": ["All", "Hourly", "Daily", "Weekly", "Monthly", "Yearly"], "description": "For Scheduler Event: how often it runs (default Hourly)"},
+        "script": {"type": "string", "description": "Python code. frappe and json are available; DocType Event scripts get doc."},
+        "enabled": {"type": "boolean", "default": true}
+      }
+    }
+  },
+  {
+    "name": "update_server_script",
+    "title": "Update Server Script",
+    "description": "Replaces a Server Script's code (checked against the sandbox's limits first), changes its DocType event, or enables or disables it. Needs server scripts enabled on the bench and an approved plan from submit_plan.",
+    "inputSchema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "script": {"type": "string"}, "enabled": {"type": "boolean"}, "event": {"type": "string"}}}
+  },
+  {
+    "name": "list_server_scripts",
+    "title": "List Server Scripts",
+    "description": "Lists Server Scripts with their type, DocType, event, API method, schedule and enabled state, optionally filtered by DocType or script type. At most 100 come back, newest first.",
+    "inputSchema": {"type": "object", "properties": {"doctype": {"type": "string"}, "scriptType": {"type": "string", "enum": ["DocType Event", "API", "Scheduler Event", "Permission Query"]}}}
+  },
+  {
+    "name": "get_server_script",
+    "title": "Get Server Script",
+    "description": "Returns a Server Script's full Python code with its type, DocType, event, API method, schedule and enabled state. Use before changing or debugging it.",
+    "inputSchema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+  },
+  {
+    "name": "apply_script_fix",
+    "title": "Apply Script Fix",
+    "description": "Replaces the code of a Client Script or Server Script with a corrected version and, by default, enables it. Server-side code is checked against the sandbox's limits first. Use after debug_client_script or debug_server_script. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["scriptName", "scriptType", "fixedScript"],
+      "properties": {
+        "scriptName": {"type": "string"},
+        "scriptType": {"type": "string", "enum": ["client", "server"]},
+        "fixedScript": {"type": "string", "description": "The corrected full script"},
+        "enable": {"type": "boolean", "default": true, "description": "Also enable the script"}
+      }
+    }
   }
 ]

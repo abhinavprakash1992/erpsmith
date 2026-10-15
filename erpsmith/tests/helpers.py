@@ -101,3 +101,8 @@ def forget_plans(user="Administrator"):
 	for name in frappe.get_all("MCP Plan", filters={"owner": user}, pluck="name"):
 		frappe.delete_doc("MCP Plan", name, ignore_permissions=True, force=True)
 	frappe.db.commit()
+
+
+def server_scripts(enabled=True):
+	"""Patch whether the bench runs server scripts (`server_script_enabled`, off on the dev benches)."""
+	return patch("frappe.utils.safe_exec.is_safe_exec_enabled", return_value=enabled)
