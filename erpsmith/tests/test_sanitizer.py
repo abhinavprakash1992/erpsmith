@@ -17,6 +17,7 @@ FAILS = [
 	("x = frappe.generate_hash()", None),
 	("frappe.utils.background_jobs.enqueue('frappe.ping')", None),
 	("x = '{}'.format(1)", None),
+	("x = frappe.format(1)", None),  # every attribute named format is rejected at compile time, frappe.format included
 	("_x = 1", None),
 	("def _f():\n    return 1\nx = _f()", None),
 	("def f(_a):\n    return _a\nx = f(1)", None),
@@ -112,6 +113,13 @@ class TestSanitizerOutput(FrappeTestCase):
 	def test_commit_is_flagged_only_in_doctype_event_scripts(self):
 		self.assertTrue(sanitizer.check("frappe.db.commit()", "DocType Event")[2])
 		self.assertEqual(sanitizer.check("frappe.db.commit()", "Scheduler Event")[2], [])
+
+	def test_an_import_that_shares_its_line_with_other_code_is_a_problem_not_a_rewrite(self):
+		script = "try: import json\nexcept Exception:\n    pass"
+		clean, removed, problems = sanitizer.check(script)
+		self.assertEqual(removed, [])
+		self.assertEqual(len(problems), 1)
+		self.assertEqual(clean, script)
 
 	def test_text_in_strings_and_comments_is_not_code(self):
 		script = "# hasattr(x) and '{}'.format\nx = 'call hasattr( or .format( here'"

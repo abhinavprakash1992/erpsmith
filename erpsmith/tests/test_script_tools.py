@@ -105,3 +105,18 @@ class TestScriptTools(FrappeTestCase):
 			with server_scripts():
 				err, out = run(tool, args)
 			self.assertEqual(out["type"], "InvalidArguments", (tool, out))
+
+	def test_an_unsafe_update_or_fix_leaves_the_stored_script_unchanged(self):
+		original = "doc.content = doc.content or 'x'"
+		with server_scripts():
+			err, out = run("create_server_script", {"name": f"{PREFIX} Keep", "scriptType": "DocType Event", "doctype": TARGET,
+				"event": "Before Save", "script": original})
+		self.assertFalse(err, out)
+		bad = "x = hasattr(frappe, 'db')"
+		for tool, args in (("update_server_script", {"name": f"{PREFIX} Keep", "script": bad}),
+				("apply_script_fix", {"scriptName": f"{PREFIX} Keep", "scriptType": "server", "fixedScript": bad})):
+			with server_scripts():
+				err, out = run(tool, args)
+			self.assertTrue(err, tool)
+			self.assertEqual(out["type"], "UnsafeScript", (tool, out))
+			self.assertEqual(frappe.db.get_value("Server Script", f"{PREFIX} Keep", "script"), original)

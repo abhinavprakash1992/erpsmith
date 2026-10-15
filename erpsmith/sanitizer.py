@@ -123,7 +123,8 @@ def check(script, script_type=None):
 
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Import) and all(a.asname is None and a.name.split(".")[0] in GLOBAL_MODULES for a in node.names) \
-				and node.lineno == node.end_lineno and ";" not in lines[node.lineno - 1]:
+				and node.lineno == node.end_lineno and ";" not in lines[node.lineno - 1] \
+				and lines[node.lineno - 1].lstrip().startswith("import "):
 			removed[node.lineno] = lines[node.lineno - 1].strip()
 		elif isinstance(node, (ast.Import, ast.ImportFrom)):
 			flag(node, _import_problem(node))
