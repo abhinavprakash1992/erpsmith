@@ -1,4 +1,6 @@
+import base64
 import json
+import struct
 import threading
 import time
 from pathlib import Path
@@ -105,3 +107,58 @@ class TestColdLoad(FrappeTestCase):
 				vectors.embed("x")
 		self.assertIsNone(vectors._model)
 		self.assertEqual(vectors.embed("x").shape, (vectors.DIM,))
+
+
+class TestHardening(FrappeTestCase):
+	def setUp(self):
+		self.q = vectors.embed("x")
+		# exactly representable rows, so equal scores are bit-for-bit equal
+		self.unit = np.zeros(vectors.DIM, dtype=np.float32)
+		self.unit[0] = 1.0
+
+	def test_top_k_returns_nothing_for_k_of_zero_or_less(self):
+		matrix = np.stack([vectors.embed(t) for t in ("a", "b", "c")])
+		for k in (0, -1, -9):
+			self.assertEqual(vectors.top_k(matrix, self.q, k), [], k)
+
+	def test_top_k_takes_a_whole_number_given_as_float(self):
+		matrix = np.stack([vectors.embed(t) for t in ("a", "b", "c")])
+		self.assertEqual(len(vectors.top_k(matrix, self.q, 2.0)), 2)
+
+	def test_top_k_ties_keep_row_order(self):
+		matrix = np.stack([self.unit] * 4)
+		self.assertEqual([i for i, _ in vectors.top_k(matrix, self.unit, 3)], [0, 1, 2])
+
+	def test_top_k_takes_a_single_row_and_an_empty_one_dimensional_array(self):
+		self.assertEqual([i for i, _ in vectors.top_k(self.q, self.q, 5)], [0])
+		self.assertEqual(vectors.top_k(np.array([], dtype=np.float32), self.q, 5), [])
+
+	def test_from_b64_checks_the_length_and_the_alphabet(self):
+		for raw in (b"", b"\0" * 4, b"\0" * (vectors.DIM * 4 + 4)):
+			with self.assertRaises(ValueError, msg=len(raw)):
+				vectors.from_b64(base64.b64encode(raw))
+		with self.assertRaises(ValueError):
+			vectors.from_b64("not base64 at all!")
+
+	def test_from_b64_returns_a_writable_native_float32_array(self):
+		arr = vectors.from_b64(vectors.to_b64(self.q))
+		self.assertEqual(arr.dtype, np.float32)
+		self.assertTrue(arr.dtype.isnative)
+		arr[0] = 1.0  # a read-only buffer raises here
+
+	def test_wire_format_is_little_endian_float32(self):
+		# Guards the stored format. On little-endian hardware this passes before and after the change.
+		values = [float(i) for i in range(vectors.DIM)]
+		wire = struct.pack(f"<{vectors.DIM}f", *values)
+		self.assertEqual(vectors.to_b64(values), base64.b64encode(wire).decode())
+		self.assertEqual(vectors.from_b64(base64.b64encode(wire)).tolist(), values)
+
+	def test_to_b64_refuses_a_wrong_shape(self):
+		for bad in (np.zeros(10), np.zeros((2, vectors.DIM)), []):
+			with self.assertRaises(ValueError):
+				vectors.to_b64(bad)
+
+	def test_embed_needs_a_string(self):
+		for bad in (None, 5, b"bytes", ["x"]):
+			with self.assertRaisesRegex(TypeError, "needs a str"):
+				vectors.embed(bad)

@@ -47,7 +47,9 @@ def _load():
 
 
 def embed(text):
-	"""L2-normalized 384-d float32 embedding of `text`."""
+	"""L2-normalized 384-d float32 embedding of `text` (a str; callers coerce a missing field with `text or ""`)."""
+	if not isinstance(text, str):
+		raise TypeError(f"embed() needs a str, got {type(text).__name__}")
 	session, tokenizer, input_names = _load()
 	enc = tokenizer.encode(text)
 	# transformers.js cuts the token list at 512 after adding [CLS]/[SEP], so a long text loses its [SEP]. Do the same to match its vectors.
@@ -62,20 +64,29 @@ def embed(text):
 
 
 def to_b64(vec):
-	return base64.b64encode(np.asarray(vec, dtype=np.float32).tobytes()).decode()
+	"""Little-endian float32 bytes in base64: the format of the stored `vector` fields."""
+	arr = np.asarray(vec, dtype="<f4")
+	if arr.shape != (DIM,):
+		raise ValueError(f"a vector has {DIM} values, got shape {arr.shape}")
+	return base64.b64encode(arr.tobytes()).decode("ascii")
 
 
 def from_b64(s):
-	return np.frombuffer(base64.b64decode(s), dtype=np.float32)
+	"""The vector stored by `to_b64`, as a writable native float32 array. ValueError for anything else."""
+	raw = base64.b64decode(s, validate=True)
+	if len(raw) != DIM * 4:
+		raise ValueError(f"a vector is {DIM * 4} bytes, got {len(raw)}")
+	return np.frombuffer(raw, dtype="<f4").astype(np.float32)  # a copy: writable, native byte order
 
 
 def top_k(matrix, query, k):
-	"""[(row index, cosine)] of the k rows most similar to `query`, best first. Rows and query must be normalized."""
+	"""[(row index, cosine)] of the k rows most similar to `query`, best first; equal scores keep row order.
+	Rows and query must be normalized. A single row (1-D) counts as a one-row matrix; k <= 0 or no rows give []."""
 	# ponytail: brute-force scan, fine to ~50k rows; add an ANN index past that.
-	if len(matrix) == 0:
+	matrix = np.atleast_2d(np.asarray(matrix, dtype=np.float32))
+	k = int(k)
+	if k <= 0 or matrix.size == 0:
 		return []
 	scores = matrix @ query
-	k = min(k, len(scores))
-	idx = np.argpartition(-scores, k - 1)[:k]
-	idx = idx[np.argsort(-scores[idx])]
-	return [(int(i), float(scores[i])) for i in idx]
+	order = np.argsort(-scores, kind="stable")[:k]
+	return [(int(i), float(scores[i])) for i in order]
