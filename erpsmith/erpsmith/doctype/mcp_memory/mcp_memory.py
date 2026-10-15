@@ -1,7 +1,7 @@
 import frappe
 from frappe.model.document import Document
 
-from erpsmith import memory, vectors
+from erpsmith import memory, vector_cache, vectors
 
 
 class MCPMemory(Document):
@@ -26,3 +26,11 @@ class MCPMemory(Document):
 		# validate() has already refused anything too long, so embed() never sees a huge string
 		if not self.vector or self.has_value_changed("title") or self.has_value_changed("content"):
 			self.vector = vectors.to_b64(vectors.embed(memory.note_text(self.title, self.content)))
+
+	def on_update(self):
+		if not self.flags.skip_invalidate:
+			vector_cache.invalidate(memory.DOCTYPE)
+
+	def on_trash(self):
+		if not self.flags.skip_invalidate:
+			vector_cache.invalidate(memory.DOCTYPE)

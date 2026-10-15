@@ -2,7 +2,7 @@ import json
 
 import frappe
 
-from erpsmith import mcp
+from erpsmith import mcp, vector_cache
 
 
 def call(name, args=None):
@@ -23,3 +23,4 @@ def make_user(email):
 def empty_memory_table():
 	"""Tests rank and count notes, so they start from an empty table. Rolled back with the test class."""
 	frappe.db.delete("MCP Memory")
+	vector_cache.invalidate("MCP Memory")  # a raw delete skips the controller; also bumps again on rollback
