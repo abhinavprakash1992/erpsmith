@@ -12,6 +12,7 @@ quantized matmuls slightly differently from the 1.14 Node ships (1.14.1, 1.20.1,
 """
 
 import base64
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -21,22 +22,28 @@ MAX_TOKENS = 512
 _DIR = Path(__file__).parent / "embedding"
 # ponytail: ~50-80 MB RAM per worker that serves a memory call; move to a dedicated embedding worker if bench RAM becomes the constraint.
 _model = None
+_lock = threading.Lock()  # concurrent cold calls (threaded servers) must build one session, not one each
 
 
 def _load():
 	global _model
-	if _model is None:
-		import onnxruntime as ort
-		from tokenizers import Tokenizer
+	model = _model
+	if model is None:
+		with _lock:
+			model = _model
+			if model is None:  # re-check: another thread may have finished while we waited for the lock
+				import onnxruntime as ort
+				from tokenizers import Tokenizer
 
-		tokenizer = Tokenizer.from_file(str(_DIR / "tokenizer.json"))
-		tokenizer.no_padding()
-		tokenizer.no_truncation()  # tokenizer.json bakes in max_length=128; embed() truncates itself
-		options = ort.SessionOptions()
-		options.intra_op_num_threads = 1  # gunicorn runs several workers; don't oversubscribe cores
-		session = ort.InferenceSession(str(_DIR / "model_quantized.onnx"), options, providers=["CPUExecutionProvider"])
-		_model = (session, tokenizer, {i.name for i in session.get_inputs()})
-	return _model
+				tokenizer = Tokenizer.from_file(str(_DIR / "tokenizer.json"))
+				tokenizer.no_padding()
+				tokenizer.no_truncation()  # tokenizer.json bakes in max_length=128; embed() truncates itself
+				options = ort.SessionOptions()
+				options.intra_op_num_threads = 1  # gunicorn runs several workers; don't oversubscribe cores
+				session = ort.InferenceSession(str(_DIR / "model_quantized.onnx"), options, providers=["CPUExecutionProvider"])
+				# assigned only once complete, so a failed build leaves _model None and the next call retries
+				model = _model = (session, tokenizer, {i.name for i in session.get_inputs()})
+	return model
 
 
 def embed(text):

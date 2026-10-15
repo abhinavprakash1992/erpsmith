@@ -1,5 +1,8 @@
 import json
+import threading
+import time
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from frappe.tests.utils import FrappeTestCase
@@ -51,3 +54,54 @@ class TestVectors(FrappeTestCase):
 		q = vectors.embed("x")
 		self.assertEqual(vectors.top_k(np.zeros((0, vectors.DIM), dtype=np.float32), q, 5), [])
 		self.assertEqual(len(vectors.top_k(np.stack([q]), q, 5)), 1)
+
+
+class TestColdLoad(FrappeTestCase):
+	def setUp(self):
+		self._warm = vectors._model
+		vectors._model = None  # start cold; tearDown puts the original state back for other tests
+
+	def tearDown(self):
+		vectors._model = self._warm
+
+	def test_concurrent_cold_starts_build_one_session(self):
+		import onnxruntime
+
+		real_session, built = onnxruntime.InferenceSession, []
+
+		def slow_session(*args, **kwargs):
+			built.append(1)
+			time.sleep(0.2)  # widen the race window so unguarded callers all get in
+			return real_session(*args, **kwargs)
+
+		n = 8
+		barrier, results = threading.Barrier(n), [None] * n
+
+		def work(i):
+			barrier.wait()
+			try:
+				results[i] = vectors.embed("hello")
+			except Exception as e:  # report in the main thread
+				results[i] = e
+
+		with patch.object(onnxruntime, "InferenceSession", slow_session):
+			threads = [threading.Thread(target=work, args=(i,)) for i in range(n)]
+			for t in threads:
+				t.start()
+			for t in threads:
+				t.join()
+
+		self.assertEqual(len(built), 1)
+		for r in results:
+			self.assertIsInstance(r, np.ndarray, r)
+			self.assertEqual(r.shape, (vectors.DIM,))
+			np.testing.assert_array_equal(r, results[0])
+
+	def test_failed_load_leaves_no_singleton_and_is_retried(self):
+		import onnxruntime
+
+		with patch.object(onnxruntime, "InferenceSession", side_effect=RuntimeError("boom")):
+			with self.assertRaises(RuntimeError):
+				vectors.embed("x")
+		self.assertIsNone(vectors._model)
+		self.assertEqual(vectors.embed("x").shape, (vectors.DIM,))
