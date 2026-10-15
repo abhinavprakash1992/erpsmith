@@ -189,5 +189,74 @@
         "kind": {"type": "string", "enum": ["doctype", "manual", "doc"], "description": "doctype = this site's DocType structure; manual = ERPNext user-manual pages ('doc' means the same). Omit to search both."}
       }
     }
+  },
+  {
+    "name": "create_doctype",
+    "title": "Create DocType",
+    "description": "Creates a new custom DocType (stored in the database, custom=1) with its fields, naming rule and permissions; System Manager gets full access. Use for a new kind of document; add_field extends an existing DocType instead. It changes the database schema, which commits at once. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["name", "module"],
+      "properties": {
+        "name": {"type": "string", "description": "DocType name, e.g. 'Customer Feedback'"},
+        "module": {"type": "string", "description": "Module Def it belongs to, e.g. Custom, CRM, Buying"},
+        "fields": {
+          "type": "array",
+          "description": "Fields in form order",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {"type": "string"},
+              "fieldname": {"type": "string", "description": "Derived from the label when omitted"},
+              "fieldtype": {"type": "string", "enum": ["Data", "Int", "Float", "Currency", "Date", "Datetime", "Time", "Text", "Small Text", "Long Text", "Check", "Select", "Link", "Dynamic Link", "Table", "Attach", "Attach Image", "Color", "Password", "Percent", "Rating", "Signature", "HTML", "Heading", "Section Break", "Column Break", "Tab Break"]},
+              "options": {"type": "string", "description": "Link: the linked DocType. Select: one option per line. Table: the child DocType."},
+              "required": {"type": "boolean"},
+              "bold": {"type": "boolean"},
+              "inListView": {"type": "boolean"},
+              "inFilter": {"type": "boolean", "description": "Show as a standard filter in the list view"},
+              "readOnly": {"type": "boolean"},
+              "hidden": {"type": "boolean"},
+              "default": {"type": "string"},
+              "description": {"type": "string"},
+              "dependsOn": {"type": "string", "description": "Display condition, e.g. eval:doc.status=='Active'"},
+              "mandatoryDependsOn": {"type": "string"}
+            }
+          }
+        },
+        "isSubmittable": {"type": "boolean", "description": "Documents can be submitted and cancelled, like invoices"},
+        "isChild": {"type": "boolean", "description": "A child table DocType, used inside another DocType"},
+        "isSingle": {"type": "boolean", "description": "A single record, like a Settings page"},
+        "hasNamingSeries": {"type": "boolean", "default": true},
+        "namingSeries": {"type": "string", "description": "Naming series pattern, e.g. CF-.YYYY.-.##### (default CUSTOM-.YYYY.-.#####)"},
+        "autoName": {"type": "string", "description": "Frappe autoname rule, e.g. naming_series:, field:title or hash"},
+        "trackChanges": {"type": "boolean", "default": true},
+        "description": {"type": "string"},
+        "icon": {"type": "string"}
+      }
+    }
+  },
+  {
+    "name": "get_doctype",
+    "title": "Get DocType",
+    "description": "Returns a DocType's settings, every field (custom fields and property overrides included) and the permission rules in force. Use before changing a DocType or writing code against its fields.",
+    "inputSchema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+  },
+  {
+    "name": "list_doctypes",
+    "title": "List DocTypes",
+    "description": "Lists DocTypes by name, optionally filtered by module or by a fragment of the name, showing whether each is custom, a child table, single or submittable. At most 200 come back.",
+    "inputSchema": {"type": "object", "properties": {"module": {"type": "string"}, "search": {"type": "string", "description": "Part of the DocType name"}}}
+  },
+  {
+    "name": "delete_doctype",
+    "title": "Delete DocType",
+    "description": "Deletes a custom DocType (custom=1) with its custom fields, property setters and permission rules; standard DocTypes are refused. Frappe keeps the database table and its rows until bench trim-database drops them. Needs an approved plan from submit_plan.",
+    "inputSchema": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}}
+  },
+  {
+    "name": "rename_doctype",
+    "title": "Rename DocType",
+    "description": "Renames a custom DocType (custom=1) and its database table, updating links to it; standard DocTypes are refused. It changes the database schema, which commits at once. Needs an approved plan from submit_plan.",
+    "inputSchema": {"type": "object", "required": ["oldName", "newName"], "properties": {"oldName": {"type": "string"}, "newName": {"type": "string"}}}
   }
 ]

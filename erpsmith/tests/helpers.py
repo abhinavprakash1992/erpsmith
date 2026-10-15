@@ -79,3 +79,25 @@ def counted_sessions():
 			yield built
 	finally:
 		vectors._model = warm
+
+
+TEST_DOCTYPE_PREFIX = "ERPSmith Test"
+
+
+def drop_doctype(name):
+	"""Remove a DocType a test made, with its table. DocType changes commit, so the test's rollback cannot remove it."""
+	assert name.startswith(TEST_DOCTYPE_PREFIX), f"drop_doctype only removes test DocTypes, not {name}"
+	frappe.set_user("Administrator")
+	if frappe.db.exists("DocType", name):
+		frappe.delete_doc("DocType", name, force=True)
+	for doctype, field in (("Custom Field", "dt"), ("Property Setter", "doc_type"), ("Custom DocPerm", "parent")):
+		frappe.db.delete(doctype, {field: name})
+	frappe.db.sql_ddl(f"drop table if exists `tab{name}`")  # commits
+	frappe.db.commit()
+
+
+def forget_plans(user="Administrator"):
+	"""Delete `user`'s plans. A schema change commits the plan it ran under, which no class rollback removes."""
+	for name in frappe.get_all("MCP Plan", filters={"owner": user}, pluck="name"):
+		frappe.delete_doc("MCP Plan", name, ignore_permissions=True, force=True)
+	frappe.db.commit()
