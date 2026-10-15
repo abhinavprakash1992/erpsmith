@@ -39,6 +39,11 @@ class TestVersionToken(FrappeTestCase):
 class TestSnapshots(FrappeTestCase):
 	def setUp(self):
 		vector_cache._snapshots.clear()
+		# The table fingerprint would also notice most of these writes. Pin it so that only the version
+		# token decides whether a snapshot is reused: these tests prove the token moves when it should.
+		patcher = patch.object(vector_cache, "_fingerprint", return_value=(0, None))
+		patcher.start()
+		self.addCleanup(patcher.stop)
 		empty_memory_table()
 
 	def tearDown(self):
@@ -81,6 +86,7 @@ class TestSnapshots(FrappeTestCase):
 			vectors.embed("Warehouse stores\n\nWarehouse naming convention for stores, stated twice"), atol=1e-6)
 
 	def test_a_rolled_back_write_is_not_served(self):
+		frappe.db.after_rollback.reset()  # drop setUp's queued bump: only the controller's own invalidate may refresh the cache
 		frappe.db.savepoint("probe")
 		note("ghost").insert()
 		self.assertIn("ghost", [r.title for r in vector_cache.snapshot(DOCTYPE, ("title",)).rows])
@@ -118,6 +124,26 @@ class TestSnapshots(FrappeTestCase):
 		self.assertEqual(self.top("send http request", 5, {"topic": "bug-fix"}), [b.name])
 		self.assertEqual(self.top("send http request", 5, {"topic": "handoff"}), [])
 
+	def test_where_on_an_uncached_field_is_an_error(self):
+		with self.assertRaises(ValueError):
+			vector_cache.search(DOCTYPE, vectors.embed("x"), 1, ("title",), {"topic": "pattern"})
+
+	def test_invalidate_bumps_again_after_the_commit(self):
+		frappe.db.after_commit.reset()
+		frappe.db.after_rollback.reset()
+		vector_cache.invalidate(DOCTYPE)
+		v = vector_cache.version(DOCTYPE)
+		frappe.db.after_commit.run()
+		self.assertNotEqual(vector_cache.version(DOCTYPE), v)
+
+	def test_invalidate_bumps_again_after_a_rollback(self):
+		frappe.db.after_commit.reset()
+		frappe.db.after_rollback.reset()
+		vector_cache.invalidate(DOCTYPE)
+		v = vector_cache.version(DOCTYPE)
+		frappe.db.after_rollback.run()
+		self.assertNotEqual(vector_cache.version(DOCTYPE), v)
+
 	def test_an_empty_table_gives_an_empty_matrix_and_no_hits(self):
 		snap = vector_cache.snapshot(DOCTYPE, ("topic",))
 		self.assertEqual(snap.matrix.shape, (0, vectors.DIM))
@@ -138,12 +164,7 @@ class TestAcrossProcesses(FrappeTestCase):
 	def setUp(self):
 		vector_cache._snapshots.clear()
 
-	def test_a_write_committed_by_another_process_is_seen(self):
-		"""Workers are separate processes: the counter in Redis is what tells this one a row changed."""
-		title = f"cross-process probe {frappe.generate_hash(length=8)}"
-		self.addCleanup(self._remove_committed_probe, title)
-		frappe.db.commit()  # leave this test's database snapshot so rows committed elsewhere become visible
-		self.assertNotIn(title, [r.title for r in vector_cache.snapshot(DOCTYPE, ("title",)).rows])
+	def _commit_a_note_in_another_process(self, title):
 		code = (
 			"import frappe\n"
 			f"frappe.init(site={frappe.local.site!r}, sites_path='.')\n"
@@ -156,8 +177,33 @@ class TestAcrossProcesses(FrappeTestCase):
 		)
 		sites = frappe.utils.get_bench_path() + "/sites"
 		subprocess.run([sys.executable, "-c", code], cwd=sites, check=True, capture_output=True, timeout=180)
+
+	def titles(self):
+		return [r.title for r in vector_cache.snapshot(DOCTYPE, ("title",)).rows]
+
+	def test_a_write_committed_by_another_process_is_seen(self):
+		"""Workers are separate processes: the counter in Redis is what tells this one a row changed."""
+		title = f"cross-process probe {frappe.generate_hash(length=8)}"
+		self.addCleanup(self._remove_committed_probe, title)
+		frappe.db.commit()  # leave this test's database snapshot so rows committed elsewhere become visible
+		self.assertNotIn(title, self.titles())
+		self._commit_a_note_in_another_process(title)
 		frappe.db.commit()  # a new transaction, so this process sees the other one's commit
-		self.assertIn(title, [r.title for r in vector_cache.snapshot(DOCTYPE, ("title",)).rows])
+		self.assertIn(title, self.titles())
+
+	def test_a_snapshot_built_from_a_stale_transaction_view_is_rebuilt(self):
+		"""REPEATABLE READ: this transaction's view is fixed by its first read, so it sees the new token but
+		not the new row. That snapshot must not be served to the next transaction."""
+		title = f"stale view probe {frappe.generate_hash(length=8)}"
+		self.addCleanup(self._remove_committed_probe, title)
+		frappe.db.commit()
+		frappe.db.get_value("User", "Administrator", "name")  # fixes this transaction's read view
+		self._commit_a_note_in_another_process(title)
+		self.assertNotIn(title, self.titles())  # stale view: the row is invisible, and that is expected
+		frappe.db.commit()  # a new transaction
+		with patch.object(vector_cache, "_build", wraps=vector_cache._build) as build:
+			self.assertIn(title, self.titles())
+		self.assertEqual(build.call_count, 1)
 
 	@staticmethod
 	def _remove_committed_probe(title):

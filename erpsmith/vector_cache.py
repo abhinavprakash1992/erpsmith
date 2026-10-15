@@ -3,6 +3,14 @@
 A search needs every vector of a table as one matrix. Reading and decoding them takes tens of
 milliseconds, so each worker process keeps the decoded matrix and rebuilds it only when the table's
 version in Redis has moved. Every write to the table moves it (see `invalidate`).
+
+The token alone is not enough. MariaDB runs REPEATABLE READ: a request whose transaction already read
+something has its read view fixed at that first SELECT. If another process then commits a note and moves
+the token, this request sees the new token but reads the table through the old view, and would cache rows
+without the note under the new token for every later request. So a snapshot also records a fingerprint of
+the table (row count and newest `modified`) taken in the same transaction as its rows, and is reused only
+while the token and a freshly read fingerprint both match. A snapshot built from a stale view then differs
+from the fingerprint of the next, fresh transaction and is rebuilt.
 """
 
 import threading
@@ -19,10 +27,10 @@ _lock = threading.Lock()  # ponytail: one lock for every table; per-table locks 
 
 
 class Snapshot:
-	__slots__ = ("token", "rows", "matrix")
+	__slots__ = ("token", "fingerprint", "rows", "matrix")
 
-	def __init__(self, token, rows, matrix):
-		self.token, self.rows, self.matrix = token, rows, matrix
+	def __init__(self, token, fingerprint, rows, matrix):
+		self.token, self.fingerprint, self.rows, self.matrix = token, fingerprint, rows, matrix
 
 
 def redis_key(doctype):
@@ -68,8 +76,15 @@ def invalidate(doctype):
 	frappe.db.after_rollback.add(lambda: bump(doctype))
 
 
+def _fingerprint(doctype):
+	"""(row count, newest `modified`) of the table in this transaction's view. `doctype` is always one of
+	the app's own internal DocTypes, never user input."""
+	return tuple(frappe.db.sql(f"select count(*), max(`modified`) from `tab{doctype}`")[0])
+
+
 def _build(doctype, fields, token):
 	rows, vecs = [], []
+	fingerprint = _fingerprint(doctype)  # same transaction as the rows below
 	# get_all skips permission checks on purpose: the tools check read permission before they get here
 	for row in frappe.get_all(doctype, fields=["name", "vector", *fields], order_by="creation asc, name asc"):
 		try:
@@ -78,19 +93,26 @@ def _build(doctype, fields, token):
 			continue  # a row with no usable vector cannot be ranked
 		rows.append(row)
 	matrix = np.stack(vecs) if vecs else np.zeros((0, vectors.DIM), dtype=np.float32)
-	return Snapshot(token, rows, matrix)
+	return Snapshot(token, fingerprint, rows, matrix)
+
+
+def _current(snap, doctype, token):
+	return (snap is not None and token is not None and snap.token == token
+		and snap.fingerprint == _fingerprint(doctype))
 
 
 def snapshot(doctype, fields=()):
 	"""This site's decoded vectors for `doctype`; `rows[i]` carries `name` plus `fields`."""
 	key = (frappe.local.site, doctype, tuple(fields))
-	token = version(doctype)  # read first: a write that lands during the build leaves us looking old, so we rebuild
+	# token first: a write that moves it after this read makes the next call rebuild. A stale transaction view
+	# (see the module docstring) is what the fingerprint catches.
+	token = version(doctype)
 	snap = _snapshots.get(key)
-	if snap is not None and token is not None and snap.token == token:
+	if _current(snap, doctype, token):
 		return snap
 	with _lock:
 		snap = _snapshots.get(key)
-		if snap is not None and token is not None and snap.token == token:
+		if _current(snap, doctype, token):
 			return snap
 		snap = _build(doctype, tuple(fields), token)
 		if token is not None:
@@ -101,6 +123,9 @@ def snapshot(doctype, fields=()):
 def search(doctype, query_vector, k, fields=(), where=None):
 	"""[(row, cosine)] for the k rows closest to `query_vector`, best first. `where` is {field: value} over
 	the cached `fields`."""
+	missing = [f for f in (where or {}) if f not in fields]
+	if missing:
+		raise ValueError(f"where names {missing}, which are not in the cached fields {list(fields)}")
 	snap = snapshot(doctype, fields)
 	rows, matrix = snap.rows, snap.matrix
 	if where:
