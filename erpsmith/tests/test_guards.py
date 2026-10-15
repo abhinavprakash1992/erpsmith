@@ -123,6 +123,46 @@ class TestPlanGate(FrappeTestCase):
 			self.assertEqual(ran, [])
 			self.assertFalse(guards.get_current_plan()["plan"]["changes"][0]["consumed"])
 
+	def _read_then_lose_row(self, only_first=False):
+		"""Stand in for another worker consuming a change between our read and our UPDATE:
+		our snapshot still says consumed=0, the database already says 1."""
+		real = guards._unused_changes
+
+		def stale(plan_names):
+			rows = real(plan_names)
+			for row in rows[:1] if only_first else rows:
+				frappe.db.set_value("MCP Plan Change", row.name, "consumed", 1)
+			return rows
+
+		return patch.object(guards, "_unused_changes", stale)
+
+	def test_change_consumed_by_another_request_is_not_consumed_twice(self):
+		args = upd("DN-R", "r")
+		guards.approve_plan(plan(("update_record", args)))
+		with self._read_then_lose_row(), self.assertRaisesRegex(GateBlocked, "does not match"):
+			guards.check_gate("update_record", args)
+
+	def test_lost_race_falls_through_to_the_next_identical_change(self):
+		args = upd("DN-F", "f")
+		a = plan(("update_record", args))
+		b = plan(("update_record", args))
+		guards.approve_plan(a)
+		guards.approve_plan(b)
+		with self._read_then_lose_row(only_first=True):
+			guards.check_gate("update_record", args)
+		self.assertFalse(frappe.get_all("MCP Plan Change", filters={"parent": ("in", [a, b]), "consumed": 0}))
+		with self.assertRaisesRegex(GateBlocked, "does not match"):
+			guards.check_gate("update_record", args)
+
+	def test_identical_changes_in_two_plans_allow_exactly_two_calls(self):
+		args = upd("DN-T", "t")
+		guards.approve_plan(plan(("update_record", args)))
+		guards.approve_plan(plan(("update_record", args)))
+		guards.check_gate("update_record", args)
+		guards.check_gate("update_record", args)
+		with self.assertRaisesRegex(GateBlocked, "does not match"):
+			guards.check_gate("update_record", args)
+
 
 class TestDangerousOps(FrappeTestCase):
 	def test_user_security_fields_are_blocked(self):

@@ -100,6 +100,19 @@ def get_current_plan():
 	}}
 
 
+def _unused_changes(plan_names):
+	return frappe.get_all("MCP Plan Change", filters={"parent": ("in", plan_names), "consumed": 0},
+		fields=["name", "parent", "idx", "tool", "args"], order_by="creation asc, idx asc")
+
+
+def _consume(change_name):
+	"""Mark one change used. False if a concurrent request used it first: the UPDATE only matches
+	consumed=0 and waits on the other request's row lock, so a stale read cannot consume twice."""
+	frappe.db.sql("update `tabMCP Plan Change` set consumed=1, consumed_at=%s where name=%s and consumed=0",
+		(now_datetime(), change_name))
+	return frappe.db._cursor.rowcount == 1
+
+
 def check_gate(tool, args):
 	"""Raise GateBlocked unless an approved, unexpired plan of this user has an unused change
 	with exactly this tool and args; consume that change."""
@@ -126,14 +139,13 @@ def check_gate(tool, args):
 		raise GateBlocked(f"BLOCKED by plan gate: approved plan {last.name} expired at {last.expires_at}. "
 			"Submit a new plan with submit_plan.")
 	want = canonical(args)
-	unused = frappe.get_all("MCP Plan Change", filters={"parent": ("in", live), "consumed": 0},
-		fields=["name", "parent", "idx", "tool", "args"], order_by="creation asc, idx asc")
+	unused = _unused_changes(live)
 	for row in unused:
-		if row.tool == tool and row.args == want:
-			frappe.db.set_value("MCP Plan Change", row.name, {"consumed": 1, "consumed_at": now_datetime()},
-				update_modified=False)
+		if row.tool == tool and row.args == want and _consume(row.name):
 			return
-	remaining = [{"planId": r.parent, "idx": r.idx - 1, "tool": r.tool, "args": json.loads(r.args)} for r in unused]
+	# Changes that match this call are gone: used by this plan step or taken by a concurrent request.
+	remaining = [{"planId": r.parent, "idx": r.idx - 1, "tool": r.tool, "args": json.loads(r.args)}
+		for r in unused if not (r.tool == tool and r.args == want)]
 	raise GateBlocked(
 		f"BLOCKED by plan gate: '{tool}' call does not match any remaining approved change. "
 		"Args must match EXACTLY (key order does not matter). "
