@@ -14,7 +14,8 @@ from urllib.parse import quote
 import frappe
 import requests
 
-from erpsmith import vector_cache, vectors
+from erpsmith import memory, vector_cache, vectors
+from erpsmith.registry import InvalidArguments, tool
 
 DOCTYPE = "MCP Knowledge Chunk"
 OWN_MODULE = "ERPSmith"
@@ -263,3 +264,35 @@ def enqueue_build():
 			deduplicate=True, enqueue_after_commit=True)
 	except Exception:
 		frappe.log_error(title="ERPSmith: could not queue the knowledge build")
+
+
+MAX_RESULT_CHARS = 6000  # a big DocType (Sales Invoice) is about 15,000 characters; keep results cheap
+KINDS = {"doctype": "doctype", "manual": "manual", "doc": "manual"}  # "doc" is the Node server's word for the manual
+EMPTY_NOTE = ("The knowledge index is empty. It is built in the background after install or migrate; "
+	"to build it now, run: bench --site <site> execute erpsmith.knowledge.build")
+
+
+@tool("search_erpnext_knowledge")
+def search_erpnext_knowledge(query, topK=5, kind=None):
+	frappe.has_permission(DOCTYPE, "read", throw=True)
+	query = memory.required_text("query", query)[:memory.MAX_QUERY_CHARS]
+	if kind and kind not in KINDS:
+		raise InvalidArguments('kind must be "doctype" or "manual" ("doc" also means "manual")')
+	k = memory.clamp("topK", topK, 5, 1, 20)
+	hits = vector_cache.search(DOCTYPE, vectors.embed(query), k, ("kind",), {"kind": KINDS[kind]} if kind else None)
+	chunks = {r.name: r for r in frappe.get_all(
+		DOCTYPE, filters={"name": ["in", [row.name for row, _ in hits]]}, fields=["name", "kind", "title", "source", "content"])}
+	results = []
+	for row, score in hits:
+		chunk = chunks.get(row.name)
+		if chunk is None:  # deleted since the snapshot
+			continue
+		content = chunk.content or ""
+		if len(content) > MAX_RESULT_CHARS:
+			content = content[:MAX_RESULT_CHARS] + f"\n… [truncated at {MAX_RESULT_CHARS} characters]"
+		results.append({"kind": chunk.kind, "title": chunk.title, "source": chunk.source, "content": content,
+			"score": round(score, 4)})
+	out = {"ok": True, "query": query, "count": len(results), "results": results}
+	if not results and not frappe.db.count(DOCTYPE):
+		out["note"] = EMPTY_NOTE
+	return out
