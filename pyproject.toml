@@ -5,7 +5,11 @@ description = "ERPNext developer copilot over MCP: build, debug and fix customiz
 requires-python = ">=3.11"
 readme = "README.md"
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+    "onnxruntime>=1.20",
+    "tokenizers>=0.20",
+    "numpy>=1.26",
+]
 
 [build-system]
 requires = ["flit_core >=3.4,<4"]

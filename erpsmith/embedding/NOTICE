@@ -1,0 +1,4 @@
+model_quantized.onnx and tokenizer.json in this directory are the unmodified quantized ONNX export of
+sentence-transformers/all-MiniLM-L6-v2, published at https://huggingface.co/Xenova/all-MiniLM-L6-v2.
+They are licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0
+Copyright the original authors.
