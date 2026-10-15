@@ -34,6 +34,17 @@ def forget_seeds():
 	frappe.db.delete("DefaultValue", {"parent": "__default", "defkey": memory.APPLIED_DEFAULT})
 
 
+def empty_knowledge_table():
+	frappe.db.delete("MCP Knowledge Chunk")
+	vector_cache.invalidate("MCP Knowledge Chunk")
+
+
+def knowledge_chunk(key, kind=None, title=None, summary="a summary", content="some content", source="/x"):
+	"""A chunk dict as knowledge.sync takes it; the kind defaults to the part of the key before '::'."""
+	return {"chunk_key": key, "kind": kind or key.split("::", 1)[0], "title": title or key,
+		"source": source, "summary": summary, "content": content}
+
+
 @contextmanager
 def counted_sessions():
 	"""Run a block against a cold embedding model and count the ONNX sessions it builds.
