@@ -6,6 +6,7 @@ from frappe.tests.utils import FrappeTestCase
 from erpsmith import guards, mcp
 
 RESTRICTED = "mcp-restricted@example.com"
+VICTIM = "mcp-victim@example.com"
 
 
 def call(name, args):
@@ -22,12 +23,23 @@ class TestRecords(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		if not frappe.db.exists("User", RESTRICTED):
-			frappe.get_doc({"doctype": "User", "email": RESTRICTED, "first_name": "MCP Restricted",
-				"send_welcome_email": 0}).insert(ignore_permissions=True)
+		for email in (RESTRICTED, VICTIM):
+			if not frappe.db.exists("User", email):
+				frappe.get_doc({"doctype": "User", "email": email, "first_name": "MCP Test",
+					"send_welcome_email": 0}).insert(ignore_permissions=True)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
+
+	def subscribe(self, user, document):
+		"""Give `user` one Notification Settings row (a child row only that user may change); returns its name."""
+		settings = frappe.get_doc("Notification Settings", user)
+		settings.set("subscribed_documents", [{"document": document}])
+		settings.save(ignore_permissions=True)
+		return settings.subscribed_documents[0].name
+
+	def row(self, name):
+		return frappe.db.get_value("Notification Subscribed Document", name, ["parent", "document"])
 
 	def test_crud_round_trip(self):
 		create = {"doctype": "ToDo", "data": {"description": "mcp round trip"}}
@@ -134,3 +146,64 @@ class TestRecords(FrappeTestCase):
 		call("update_record", args)
 		frappe.set_user("Administrator")
 		self.assertEqual(frappe.db.get_value("ToDo", theirs.name, "description"), "theirs")
+
+	def test_update_cannot_move_a_child_row_from_another_document(self):
+		victim_row = self.subscribe(VICTIM, "ToDo")
+		self.subscribe(RESTRICTED, "Note")
+		frappe.set_user(RESTRICTED)
+		args = {"doctype": "Notification Settings", "name": RESTRICTED,
+			"data": {"subscribed_documents": [{"name": victim_row, "document": "Event"}]}}
+		approved("update_record", args)
+		err, out = call("update_record", args)
+		self.assertFalse(err, out)
+		frappe.set_user("Administrator")
+		self.assertEqual(self.row(victim_row), (VICTIM, "ToDo"))
+		(mine,) = frappe.get_all("Notification Subscribed Document", filters={"parent": RESTRICTED}, pluck="name")
+		self.assertEqual(self.row(mine), (RESTRICTED, "Event"))
+
+		# the caller's own row keeps its name, so it is updated in place
+		frappe.set_user(RESTRICTED)
+		args = {"doctype": "Notification Settings", "name": RESTRICTED,
+			"data": {"subscribed_documents": [{"name": mine, "document": "Note"}]}}
+		approved("update_record", args)
+		err, out = call("update_record", args)
+		self.assertFalse(err, out)
+		frappe.set_user("Administrator")
+		self.assertEqual(frappe.get_all("Notification Subscribed Document", filters={"parent": RESTRICTED}, pluck="name"), [mine])
+		self.assertEqual(self.row(mine), (RESTRICTED, "Note"))
+
+	def test_create_cannot_take_over_a_child_row_of_another_document(self):
+		victim_row = self.subscribe(VICTIM, "ToDo")
+		frappe.set_user(RESTRICTED)
+		args = {"doctype": "Notification Subscribed Document", "data": {"parenttype": "Notification Settings",
+			"parent": RESTRICTED, "parentfield": "subscribed_documents", "name": victim_row, "document": "Note"}}
+		approved("create_record", args)
+		err, out = call("create_record", args)
+		self.assertFalse(err, out)
+		frappe.set_user("Administrator")
+		self.assertEqual(self.row(victim_row), (VICTIM, "ToDo"))
+		self.assertIn("Note", frappe.get_all("Notification Subscribed Document", filters={"parent": RESTRICTED}, pluck="document"))
+
+	def test_create_ignores_names_on_nested_rows(self):
+		victim_group = frappe.get_doc({"doctype": "User Group", "name": "MCP Victim Group",
+			"user_group_members": [{"user": VICTIM}]}).insert()
+		victim_row = victim_group.user_group_members[0].name
+		args = {"doctype": "User Group", "data": {"name": "MCP New Group",
+			"user_group_members": [{"name": victim_row, "user": RESTRICTED}]}}
+		approved("create_record", args)
+		err, out = call("create_record", args)
+		self.assertFalse(err, out)
+		self.assertEqual(frappe.db.get_value("User Group Member", victim_row, ["parent", "user"]), (victim_group.name, VICTIM))
+		self.assertEqual(frappe.get_all("User Group Member", filters={"parent": "MCP New Group"}, pluck="user"), [RESTRICTED])
+
+	def test_updating_a_child_row_saves_its_parent_too(self):
+		row = self.subscribe(RESTRICTED, "Note")
+		before = frappe.db.get_value("Notification Settings", RESTRICTED, "modified")
+		frappe.set_user(RESTRICTED)
+		args = {"doctype": "Notification Subscribed Document", "name": row, "data": {"document": "Event"}}
+		approved("update_record", args)
+		err, out = call("update_record", args)
+		self.assertFalse(err, out)
+		frappe.set_user("Administrator")
+		self.assertEqual(self.row(row), (RESTRICTED, "Event"))
+		self.assertGreater(frappe.db.get_value("Notification Settings", RESTRICTED, "modified"), before)

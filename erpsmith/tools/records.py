@@ -17,9 +17,27 @@ def _clean(value):
 	return value
 
 
+def _new_rows(meta, data, own_rows=lambda fieldname: ()):
+	"""Rows in `data` that carry a `name` are saved as an UPDATE of that row, whichever document owns it,
+	and move under this one. Keep a name only on rows the document already owns; the rest are inserted."""
+	data = dict(data)
+	for df in meta.get_table_fields():
+		rows = data.get(df.fieldname)
+		if isinstance(rows, list):
+			own = own_rows(df.fieldname)
+			data[df.fieldname] = [
+				{k: v for k, v in row.items() if k != "name"} if isinstance(row, dict) and row.get("name") not in own else row
+				for row in rows
+			]
+	return data
+
+
 @tool("create_record")
 def create_record(doctype, data):
-	doc = frappe.client.insert({**_clean(data), "doctype": doctype})
+	data = _new_rows(frappe.get_meta(doctype), _clean(data))
+	if frappe.is_table(doctype):
+		data.pop("name", None)  # a child row with a name would take over that row of another document
+	doc = frappe.client.insert({**data, "doctype": doctype})
 	return {"name": doc["name"], "doctype": doctype, "data": doc}
 
 
@@ -35,8 +53,12 @@ def update_record(doctype, name, data):
 	# `data` has already edited, so it could forge what permission hooks read (owner, allocated_to).
 	doc.check_permission("write")
 	# doctype and name pick the record, they are not fields: letting them through retargets the save.
-	doc.update({k: v for k, v in _clean(data).items() if k not in ("doctype", "name")})
+	data = {k: v for k, v in _clean(data).items() if k not in ("doctype", "name")}
+	doc.update(_new_rows(doc.meta, data, lambda fieldname: {row.name for row in doc.get(fieldname)}))
 	doc.save()
+	if doc.get("parenttype"):
+		# As the REST API does: a changed child row is saved through its parent, so the parent validates and recomputes.
+		frappe.get_doc(doc.parenttype, doc.parent).save()
 	doc.apply_fieldlevel_read_permissions()
 	return {"updated": name, "doctype": doctype, "data": doc.as_dict()}
 
