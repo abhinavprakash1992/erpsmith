@@ -126,8 +126,9 @@ class TestHardening(FrappeTestCase):
 		self.assertEqual(len(vectors.top_k(matrix, self.q, 2.0)), 2)
 
 	def test_top_k_ties_keep_row_order(self):
-		matrix = np.stack([self.unit] * 4)
-		self.assertEqual([i for i, _ in vectors.top_k(matrix, self.unit, 3)], [0, 1, 2])
+		# 40 rows: numpy's default sort keeps order by luck on small arrays, so a smaller matrix would not catch a lost stable sort
+		matrix = np.stack([self.unit] * 40)
+		self.assertEqual([i for i, _ in vectors.top_k(matrix, self.unit, 20)], list(range(20)))
 
 	def test_top_k_takes_a_single_row_and_an_empty_one_dimensional_array(self):
 		self.assertEqual([i for i, _ in vectors.top_k(self.q, self.q, 5)], [0])
@@ -139,6 +140,10 @@ class TestHardening(FrappeTestCase):
 				vectors.from_b64(base64.b64encode(raw))
 		with self.assertRaises(ValueError):
 			vectors.from_b64("not base64 at all!")
+		# a stray newline inside a 1,536-byte payload: the lenient decoder skips it, only validate=True refuses it
+		good = vectors.to_b64(self.q)
+		with self.assertRaises(ValueError):
+			vectors.from_b64(good[:100] + "\n" + good[100:])
 
 	def test_from_b64_returns_a_writable_native_float32_array(self):
 		arr = vectors.from_b64(vectors.to_b64(self.q))
