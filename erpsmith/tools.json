@@ -46,7 +46,7 @@
   {
     "name": "create_record",
     "title": "Create Record",
-    "description": "Create a record in any DocType.",
+    "description": "Creates a record in any DocType using the signed-in user's permissions. Needs an approved plan from submit_plan.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "data"],
@@ -59,7 +59,7 @@
   {
     "name": "update_record",
     "title": "Update Record",
-    "description": "Update an existing record in any DocType.",
+    "description": "Updates fields on an existing record in any DocType using the signed-in user's permissions. Needs an approved plan from submit_plan.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "name", "data"],
@@ -73,7 +73,7 @@
   {
     "name": "get_record",
     "title": "Get Record",
-    "description": "Get a single record from any DocType.",
+    "description": "Returns one record from any DocType by name, as the signed-in user, including its child tables.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "name"],
@@ -83,7 +83,7 @@
   {
     "name": "query_records",
     "title": "Query Records",
-    "description": "Fetch records from any DocType with filters.",
+    "description": "Returns a list of records from any DocType, filtered and limited, as the signed-in user. Use to look up or count records.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype"],
@@ -99,7 +99,7 @@
   {
     "name": "delete_record",
     "title": "Delete Record",
-    "description": "Delete a record from any DocType.",
+    "description": "Deletes one record from any DocType using the signed-in user's permissions. Needs an approved plan from submit_plan.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "name"],
