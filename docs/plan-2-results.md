@@ -72,11 +72,28 @@ Peak RSS of the probe process (`resource.getrusage`), measured around the first 
 
 The first search adds 102 MB (v15) and 117 MB (v16) of peak RSS, more than the roughly 75 MB expected for the model alone. The cached vectors do not explain the difference (2,700 x 384 float32 is about 4 MB); the cause beyond the model was not isolated, and onnxruntime's arena and session overhead is the likely part. All timings are single samples and the RSS figures are peak RSS (`resource.getrusage`), so read them as orders of magnitude. Warm knowledge searches are well under the "low tens of milliseconds" bar; the memory search figure is the first memory search in the process, so it includes building the memory cache and is not a warm timing.
 
+## Seed memory (spec criterion 4)
+
+`erpsmith/seed_memory.json` ships **41 notes**: 17 sandbox-rule, 19 pattern, 5 bug-fix. Built with `python3 dev/build_seed.py` from `private/seed-candidates.json`.
+
+- Owner approval: 2026-10-15 ("approved all", no blocklist terms named). The controller read that as the 46 candidates suggested include (22) or review (24); the 43 suggested exclude (context and handoff topics, emails, foreign URLs, the company name) do not ship.
+- Of the 46: 41 shipped, all 41 reworded (directives restated as facts, dates, version labels, amounts, document ids, record counts, internal DocType and script names and vendor details removed); 5 dropped as incident reports or instance-specific notes that lose their point once made generic.
+- Every shipped note passes the hard rules (`seed_rules.hard_violations`) with the owner's private blocklist applied.
+
+After `bench migrate` on each dev site, `memory.load_seeds()` then `search_memory("can I import json in a server script", topK=3)`:
+
+| Bench | `load_seeds()` after migrate | Top 3 (id, score) |
+|---|---|---|
+| v15 | `{'inserted': 0, 'already_present': 0}` | `seed__imports-raise-importerror-in-server-scripts-frappe` 0.5166, `seed__reading-uploaded-files-from-a-server-script` 0.4675, `seed__csv-uploads-the-server-returns-rows-the-client-per` 0.3338 |
+| v16 | `{'inserted': 0, 'already_present': 0}` | same three ids, same scores |
+
+The top hit is the sandbox-rule note on imports on both versions; `test_seed_content` checks the same thing on a fresh install.
+
 ## Deviations from the plan
 
 - Plan 1's record tool descriptions were too terse for the new lint: `create_record` (31 characters), `get_record` (37) and `delete_record` (33) fall under its 40-character floor, and `update_record` (41) and `query_records` (44) only just clear it. All five were reworded in `tools.json` in descriptive voice, naming the signed-in user's permissions and, for the three write tools, the approved plan they need. No tool name, schema or argument changed.
 - `instructions.md` needed no edit: RULE 0 is true against the 15 registered tools (both memory and knowledge tools exist, the System Manager sentence is there, `add_memory` saves a note). Plan 3 items (RULE 1 sanitizer, RULE 13 drafts, RULE 16 over-claims, the `call_method_read` mention) are untouched.
-- Task 12 (the owner-approved seed) is not done: `erpsmith/seed_memory.json` is still `[]`, so a fresh install returns no import-restriction note yet.
+- Task 12: the owner approved every candidate in the include and review buckets; 5 of those 46 were dropped while rewording because they could not be made generic (see "Seed memory" above). Approved notes carry new `seed_key` values derived from their reworded titles, because the original keys came from titles with dates and integration names.
 
 ## For Plan 3 / 4
 
@@ -88,3 +105,4 @@ The first search adds 102 MB (v15) and 117 MB (v16) of peak RSS, more than the r
 - The `MCP Plan Change.args` plaintext decision (Plan 1 final review I4) is still the owner's before release.
 - `erpsmith/embedding/NOTICE` should ship the Apache-2.0 licence text itself (Plan 1 Task 6 minor, Plan 4).
 - Probe the three ERPNext-only retrieval cases once ERPNext is installed on the dev benches.
+- The seed notes are field observations from one v15 site and were reworded, not re-verified. One claim was removed because the dev benches disprove it ("Before Validate" is a valid Server Script event on v15 and v16). Two notes are in tension: child rows appended in a server script are reported dropped on save, while appending with pre-set child names is reported to work. A Server Script test on the dev benches would settle which holds before release.

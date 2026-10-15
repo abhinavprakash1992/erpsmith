@@ -1,1 +1,248 @@
-[]
+[
+ {
+  "seed_key": "bytes-literals-are-blocked",
+  "topic": "sandbox-rule",
+  "title": "`bytes` literals are blocked",
+  "content": "`frappe.utils.b64encode(b'...')` fails because `b'...'` literals are blocked. For HTTP basic auth, passing an `auth=(key, secret)` tuple works and is supported natively."
+ },
+ {
+  "seed_key": "child-table-writes-from-a-server-script-are-droppe",
+  "topic": "sandbox-rule",
+  "title": "Child table writes from a server script are dropped on save",
+  "content": "When a server script calls `doc.append(\"items\", data)` + `doc.save()`, the parent fields update BUT the child rows are silently dropped.\n\n**Root cause:** `update_children()` uses a `frappe.db.sql` DELETE to clear stale rows, and DELETE is blocked by the sandbox (SELECT-only).\n\n**What works:** the server-returns / client-persists pattern: the server method returns the rows, and a client script adds them to the form and saves it. Appending to a parent with pre-set child names (see the note on inserting child table rows) is the server-side alternative."
+ },
+ {
+  "seed_key": "dynamic-sql-in-server-scripts",
+  "topic": "sandbox-rule",
+  "title": "Dynamic SQL in Server Scripts",
+  "content": "```python\nquery = \"SELECT * FROM tab WHERE 1=1 \" + where_clause + \" ORDER BY x \" + limit_clause\ndata = frappe.db.sql(query, {'param': value}, as_dict=1)\n```\n\nValues go in `%(name)s` placeholders with a parameters dict. `frappe.db.sql()` works ONLY for `SELECT` and read-only `WITH`."
+ },
+ {
+  "seed_key": "frappe-get-roles-is-blocked-in-the-sandbox-frappe",
+  "topic": "sandbox-rule",
+  "title": "`frappe.get_roles()` is blocked in the sandbox; `frappe.db.get_all('Has Role')` works",
+  "content": "`frappe.get_roles(user)` raises `AttributeError: module has no attribute 'get_roles'` in the server-script safe_exec sandbox.\n\n**This works instead:**\n```python\nuser_roles = frappe.db.get_all(\n    'Has Role',\n    filters={'parent': frappe.session.user, 'parenttype': 'User'},\n    pluck='role'\n)\n```\nThen check with `if 'Some Role' not in user_roles`."
+ },
+ {
+  "seed_key": "frappe-runtime-sandbox-vs-a-stricter-tool-side-scr",
+  "topic": "sandbox-rule",
+  "title": "Frappe runtime sandbox vs a stricter tool-side script check",
+  "content": "What the Frappe server-script runtime accepts:\n\n| Feature | Frappe runtime |\n|---|---|\n| f-strings | Works |\n| `isinstance()` | Works |\n| `.format()` | Blocked (`.format` is an unsafe attribute) |\n| `import` | Blocked |\n\nSome tools that write Server Scripts run a stricter check of their own before saving, which can also reject f-strings and `isinstance()`. Code that passes both: `+` concatenation (`\"Bearer \" + token`), `str()`, and `type(x) == str` checks."
+ },
+ {
+  "seed_key": "frappe-submodule-method-chain-rule",
+  "topic": "sandbox-rule",
+  "title": "`frappe.<submodule>.<method>()` chain rule",
+  "content": "Direct `frappe.db.*`, `frappe.utils.*` and `frappe.utils.password.*` calls work. Other submodules (`frappe.defaults`, `frappe.permissions`) are proxied as None in the sandbox."
+ },
+ {
+  "seed_key": "function-calls-blocked-in-the-server-script-sandbo",
+  "topic": "sandbox-rule",
+  "title": "Function calls blocked in the server-script sandbox, with working alternatives",
+  "content": "| Blocked | Works instead |\n|---|---|\n| `frappe.get_roles(user)` | `frappe.db.exists(\"Has Role\", {\"parent\": user, \"role\": \"X\"})` |\n| `frappe.set_user()` | Not available: `frappe.session.user` is read-only |\n| `frappe.logger()` | `frappe.log_error(msg, title)` |\n| `frappe.publish_realtime()` | `frappe.msgprint()` |\n| `hasattr()`, `getattr()` | Direct attribute access or try/except |\n| `str.format()` | `+` concatenation |\n| `frappe.db.commit()` | Not needed: Frappe commits at the end of the request |\n| `frappe.parse_json()` | `json.loads(...)` (json is a global) |\n| `frappe.db.delete()` | `frappe.delete_doc` in a loop over `frappe.get_all(..., pluck=\"name\")` |\n| `frappe.read_file()` | No working API: parse client-side, POST as JSON |\n| `frappe.get_attr()` | Proxied as None |\n| `frappe.get_traceback()` | `str(e)` in except blocks |\n| `frappe.defaults.get_defaults()` | `frappe.db.get_single_value(\"Global Defaults\", \"default_company\")` |\n| `frappe.db.has_column()` | Try/except on the assignment |\n| `frappe.generate_hash()` reached through `frappe.db.insert` | Pre-set the `name` field so it is skipped |\n| `isinstance()` (rejected by some tool-side script checks) | `type(x) == X` |\n| `open()` | Not available |\n| `frappe.request` | `frappe.form_dict` |"
+ },
+ {
+  "seed_key": "imports-raise-importerror-in-server-scripts-frappe",
+  "topic": "sandbox-rule",
+  "title": "Imports raise ImportError in server scripts; frappe, json and datetime are globals",
+  "content": "Server Scripts run in Frappe's RestrictedPython safe_exec sandbox, where every import statement (`import json`, `import frappe`, `from x import y`) raises `ImportError`. `frappe`, `json` and `datetime` are already available as globals, so `json.loads(...)` and `datetime.strptime(...)` work in a server script without an import."
+ },
+ {
+  "seed_key": "safe-exec-def-to-def-calls-fail-shared-helpers-nes",
+  "topic": "sandbox-rule",
+  "title": "safe_exec def-to-def calls fail: shared helpers nested inside the caller work",
+  "content": "**Error:** `NameError: name 'helper' is not defined` when one top-level `def` calls another top-level `def` in a Server Script.\n\n**Cause:** Frappe `safe_exec` runs `exec(script, exec_globals, exec_locals)` with TWO DISTINCT dicts. Top-level functions capture `exec_globals` as their `__globals__`, but the function OBJECTS land in `exec_locals`. So:\n- main block -> top-level func = WORKS (the main frame sees locals as its active namespace)\n- top-level func -> another top-level func = FAILS (the callee is in locals, not in the caller's `__globals__`)\n\nThis is why a script can run deep into one function before dying on its call to a sibling helper.\n\n**Fix:** NEST the shared helper inside the function that calls it (closure scope resolves). A closure calling a *top-level* def still fails, so the helper has to live inside the caller, not just anywhere.\n```python\ndef build_data(...):\n    def get_stock_count(code):   # nested -> resolvable\n        ...\n    def get_open_so(code):\n        ...\n    ... uses both ...\n```\nWhen several top-level functions need the same helper, either nest a copy in each, or pass the helper in as a parameter from the main block (a main-frame call works).\n\n**Reproduced locally:** `exec(src, {}, {})` with distinct dicts -> def->def NameError; a single dict -> works; nesting -> works.\n\n**Applies to:** all Server Script types."
+ },
+ {
+  "seed_key": "sandbox-blocked-attributes",
+  "topic": "sandbox-rule",
+  "title": "Sandbox-blocked attributes",
+  "content": "- Any attribute starting with `_` (e.g. `frappe._dict`, `obj.__dict__`) is blocked; `(d or {}).get(...)` works instead\n- `.format` on any string is blocked (treated as an unsafe attribute)"
+ },
+ {
+  "seed_key": "server-script-behaviour-by-script-type",
+  "topic": "sandbox-rule",
+  "title": "Server Script behaviour by script type",
+  "content": "- **API scripts**: flat body only, no `def`; output via `frappe.response[\"message\"] = {...}`\n- **API scripts that receive external requests**: also need `allow_guest = 1`, a field on the Server Script DocType that can be set after creation with `frappe.client.set_value`.\n- **API scripts**: the `api_method` field is the URL slug for `/api/method/<api_method>`. Without it Frappe returns \"Failed to get method for command <name>\".\n- **Scheduler scripts**: `def` functions are allowed, called at the bottom\n- **DocType Event scripts**: `doc` is in scope automatically"
+ },
+ {
+  "seed_key": "specific-exception-classes-are-blocked-in-the-sand",
+  "topic": "sandbox-rule",
+  "title": "Specific exception classes are blocked in the sandbox",
+  "content": "`AttributeError`, `TypeError`, etc. evaluate to `None`, so `except AttributeError:` fails with `TypeError: 'NoneType' object is not callable`. `except Exception:` works."
+ },
+ {
+  "seed_key": "ternary-expressions-with-function-calls-fail-in-th",
+  "topic": "sandbox-rule",
+  "title": "Ternary expressions with function calls fail in the sandbox",
+  "content": "```python\n# FAILS: raises TypeError: 'NoneType' object is not callable\nexisting = frappe.db.get_value(...) if payment_id else None\n\n# WORKS\nexisting = None\nif payment_id:\n    existing = frappe.db.get_value(...)\n```"
+ },
+ {
+  "seed_key": "tuple-unpacking-is-blocked-in-all-server-script-ty",
+  "topic": "sandbox-rule",
+  "title": "Tuple unpacking is blocked in all server script types",
+  "content": "`a, b = func()` raises `NameError: name '_unpack_sequence_' is not defined`. This affects ALL script types: DocType Event, API and Scheduler.\n\nRestrictedPython rewrites tuple-unpack ASSIGNMENT into a `_unpack_sequence_` call that is not present in Frappe's sandbox globals. Checked with a local `compile_restricted`: only assignment-unpack (`a, b = f()`) triggers it; `for x, y in ...`, comprehensions and `return a, b` (returning a tuple) are not affected.\n\n```python\n# FAILS\na, b = func()\n# WORKS\nres = func()\na = res[0]\nb = res[1]\n```"
+ },
+ {
+  "seed_key": "ui-editor-truncates-long-script-pastes",
+  "topic": "sandbox-rule",
+  "title": "UI editor truncates long script pastes",
+  "content": "Frappe's CodeMirror editor in `/app/report/{name}` silently cuts long pastes mid-string. Symptom: `SyntaxError: unterminated string literal`.\n\n**Fix:** writing the field directly avoids the editor: `update_record`, or `frappe.client.set_value` through `call_method`. Reading it back with `get_record` and checking the last few characters confirms the whole script was saved."
+ },
+ {
+  "seed_key": "variables-starting-with-are-blocked",
+  "topic": "sandbox-rule",
+  "title": "Variables starting with `_` are blocked",
+  "content": "`SyntaxError: \"X\" is an invalid variable name because it starts with \"_\"`. This applies to ALL local names, not just attributes: `parse_ok` works, `_parse_ok` does not."
+ },
+ {
+  "seed_key": "what-does-work-in-server-scripts",
+  "topic": "sandbox-rule",
+  "title": "What does work in server scripts",
+  "content": "- `frappe.form_dict.get()`, `frappe.throw()`, `frappe.msgprint()`\n- `frappe.get_doc()`, `frappe.db.get_value()`, `frappe.db.set_value()`, `frappe.db.count()`, `frappe.db.exists()`\n- `frappe.new_doc()` + `.insert()` + `.submit()`\n- `frappe.utils.flt()`, `frappe.utils.cstr()`, `frappe.utils.today()`, `frappe.utils.now()`, `frappe.utils.now_datetime()`, `frappe.utils.add_days()`, `frappe.utils.get_timestamp()`\n- `frappe.delete_doc(doctype, name, force=True, ignore_permissions=True)` — single-row delete\n- `frappe.generate_hash()` (direct call only — blocked transitively via `db.insert`)\n- `frappe.session.user`\n- `frappe.response[\"message\"] = ...`\n- `datetime.strptime()` (datetime is in scope)\n- `try/except Exception:` (generic Exception only)\n- All dict/list/string built-in methods, basic loops, comprehensions\n- `frappe.make_get_request`, `frappe.make_post_request` — on `frappe` directly, not `frappe.utils`"
+ },
+ {
+  "seed_key": "background-job-failure-tracking-surfacing-frappe-e",
+  "topic": "pattern",
+  "title": "Background job failure tracking: surfacing `frappe.enqueue` failures on the source document",
+  "content": "A generalised monitor for surfacing `frappe.enqueue` failures back on the source DocType. The source document carries status fields (`bg_job_status`, `bg_job_id`, `bg_job_queued_at`, `bg_job_error`); its After Submit script sets them to Queued and enqueues the job; a Scheduler Event script scans Error Log for failures and writes them back; a client script shows a banner while the job is pending or failed."
+ },
+ {
+  "seed_key": "background-job-monitor-custom-fields-on-each-sourc",
+  "topic": "pattern",
+  "title": "Background job monitor: custom fields on each source DocType",
+  "content": "The background job monitor pattern uses four custom fields on each source DocType:\n- `bg_job_status` (Select: Queued/Processing/Failed)\n- `bg_job_id` (Data, hidden)\n- `bg_job_queued_at` (Datetime)\n- `bg_job_error` (Long Text, `depends_on: eval:doc.bg_job_status=='Failed'`)"
+ },
+ {
+  "seed_key": "background-job-monitor-error-log-instead-of-rq-job",
+  "topic": "pattern",
+  "title": "Background job monitor: Error Log instead of RQ Job",
+  "content": "`frappe.get_all(\"RQ Job\", filters={\"job_id\": x})` has been seen to raise IndexError from a server script. Error Log is an ordinary table and can be queried reliably, so a monitor can detect failures from it."
+ },
+ {
+  "seed_key": "background-job-monitor-the-source-doctype-s-after",
+  "topic": "pattern",
+  "title": "Background job monitor: the source DocType's After Submit script",
+  "content": "```python\njob_id = \"job-\" + doc.name + \"-\" + frappe.utils.now().replace(\" \", \"-\")\nfrappe.db.set_value(doc.doctype, doc.name, {\n    \"bg_job_status\": \"Queued\",\n    \"bg_job_id\": job_id,\n    \"bg_job_queued_at\": frappe.utils.now()\n})\nfrappe.enqueue(\"my_worker_function\", job_id=job_id, doc_name=doc.name)\n```"
+ },
+ {
+  "seed_key": "background-job-status-banner-in-a-client-script",
+  "topic": "pattern",
+  "title": "Background job status banner in a client script",
+  "content": "A client script for the background job monitor pattern shows a red banner when `bg_job_status === 'Failed'`, and calls `frm.reload_doc()` every 8 to 10 seconds while the status is Queued or Processing."
+ },
+ {
+  "seed_key": "central-background-job-monitor-scheduler-event-eve",
+  "topic": "pattern",
+  "title": "Central background job monitor (Scheduler Event, `event_frequency = \"All\"`)",
+  "content": "One Scheduler Event script can watch every source DocType through a `JOB_CONFIGS` list:\n```python\nJOB_CONFIGS = [\n    {\"doctype\": \"My Source DocType\", \"function_name\": \"enqueue_my_job\"},\n    {\"doctype\": \"Another Source DocType\", \"function_name\": \"enqueue_other_job\"},\n]\n```\n\n**Detection by Error Log scan** (querying the RQ Job DocType from a server script has been seen to raise IndexError):\n- Error Log entries created after `bg_job_queued_at` whose `error` field contains the function name → mark Failed and copy the traceback\n- Older than 2 minutes with no error → clear `bg_job_status` (success is implied by the created artifact)"
+ },
+ {
+  "seed_key": "csv-uploads-the-server-returns-rows-the-client-per",
+  "topic": "pattern",
+  "title": "CSV uploads: the server returns rows, the client persists them",
+  "content": "A dependable way to populate a child table from server-computed data: the server method only returns the processed rows, and a client script adds them to the form and saves it.\n\n**Client script** (parses the file, posts JSON):\n```js\nfetch(frm.doc.upload_file)\n  .then(r => r.text())\n  .then(text => {\n    const rows = [/* parsed objects */];\n    return frappe.call({\n      method: 'my_server_method',\n      args: { doc_name: frm.doc.name, rows: JSON.stringify(rows) }\n    });\n  })\n  .then(r => {\n    frm.clear_table('items');\n    r.message.items.forEach(it => {\n      const child = frm.add_child('items');\n      Object.assign(child, it);\n    });\n    frm.set_value('status', 'Mapped');\n    frm.refresh_field('items');\n    return frm.save();\n  });\n```\n\n**Server script** (returns the processed data):\n```python\nrows_json = frappe.form_dict.get(\"rows\")\nrows = json.loads(rows_json)\n# ...process...\nfrappe.response[\"message\"] = {\"items\": [{...}], \"counts\": {...}}\n```\n\n**Why:** child rows written server-side from a Server Script have been seen to be silently dropped on save (the stale-row DELETE is blocked in the sandbox)."
+ },
+ {
+  "seed_key": "detection-latency-of-a-scheduler-based-background",
+  "topic": "pattern",
+  "title": "Detection latency of a scheduler-based background job monitor",
+  "content": "A failure monitor that runs as a Scheduler Event with `event_frequency = \"All\"` notices a failed job about 2 to 6 minutes after it fails: one scheduler tick interval."
+ },
+ {
+  "seed_key": "filters-config-breaks-script-reports-on-frappe-v15",
+  "topic": "pattern",
+  "title": "`filters_config` breaks Script Reports on Frappe v15",
+  "content": "Setting `filters_config` in a Script Report's script body causes `ValueError: too many values to unpack (expected 6)`. Filters added through the Report document's Filters child table (in the UI) work."
+ },
+ {
+  "seed_key": "inserting-child-table-rows-server-side-parent-appe",
+  "topic": "pattern",
+  "title": "Inserting child table rows server-side: `parent.append` with pre-set names",
+  "content": "`frappe.db.insert({...})` fails for child tables: it transitively calls `frappe.generate_hash`, which is blocked.\n\n**`parent.append` + `parent.save` with pre-set child names:**\n\n```python\nparent = frappe.get_doc(\"My Parent DocType\", doc_name)\nfor idx, row in enumerate(rows):\n    item_data = {\n        \"name\": doc_name + \"-\" + str(idx + 1).zfill(4),  # skip set_new_name\n        \"field_1\": value_1,\n    }\n    parent.append(\"child_field_name\", item_data)\n\nparent.save(ignore_permissions=True)\n```\n\nPre-setting `name` makes `set_new_name` return early without calling `generate_hash`."
+ },
+ {
+  "seed_key": "optional-query-report-filters-the-sentinel-default",
+  "topic": "pattern",
+  "title": "Optional Query Report filters: the sentinel default pattern",
+  "content": "**Symptom:** `KeyError: 'custom_field_name'` in `pymysql/cursors.py` `mogrify()` on the report's first load.\n\n**Cause:** the frontend strips filters that have an empty-string or no default, so the SQL references `%(filter_name)s` but the key is absent.\n\n**Fix:** a non-empty sentinel default such as `\"All\"`, handled in the SQL:\n```sql\nAND (%(filter_name)s IS NULL OR %(filter_name)s IN ('', 'All') OR field = %(filter_name)s)\n```"
+ },
+ {
+  "seed_key": "payment-entry-creation-from-a-server-script",
+  "topic": "pattern",
+  "title": "Payment Entry creation from a Server Script",
+  "content": "`frappe.new_doc(\"Payment Entry\")` needs `party_account` set explicitly before `set_missing_values()`:\n\n```python\ncompany = frappe.db.get_single_value(\"Global Defaults\", \"default_company\")\nreceivable_account = frappe.db.get_value(\"Company\", company, \"default_receivable_account\")\ncurrency = frappe.db.get_value(\"Company\", company, \"default_currency\")\npe.party_account = receivable_account\npe.party_account_currency = currency\npe.set_missing_values()\n```\n\n**`party` has to be a real Customer record.** A placeholder party fails: `_validate_links()` raises `LinkValidationError`. A guard such as `if not customer:` that logs and skips avoids it."
+ },
+ {
+  "seed_key": "payment-entry-from-a-guest-context-webhook-with-al",
+  "topic": "pattern",
+  "title": "Payment Entry from a Guest context (webhook with `allow_guest=1`)",
+  "content": "`set_missing_values()` → `get_account_details()` → `frappe.has_permission(..., throw=True)` throws for Guest every time, regardless of `ignore_permissions=True` on insert.\n\n**Fix:** also set `paid_from`, `paid_to` and the currencies before insert; that path skips the permission check:\n```python\npe.paid_from = receivable_account\npe.paid_from_account_currency = currency      # the company's default currency\npe.paid_to = gateway_account\npe.paid_to_account_currency = currency\npe.source_exchange_rate = 1\npe.target_exchange_rate = 1\n```\n\nThe gateway's account from its Mode of Payment:\n```python\nfrappe.db.get_value(\"Mode of Payment Account\",\n    {\"parent\": mode_of_payment, \"company\": company}, \"default_account\")\n```\n\nOr wrap the insert with the flag:\n```python\nfrappe.flags.ignore_permissions = True\npe.insert(ignore_permissions=True)\npe.submit()\nfrappe.flags.ignore_permissions = False\n```"
+ },
+ {
+  "seed_key": "re-runnable-operations-one-parent-document-per-bat",
+  "topic": "pattern",
+  "title": "Re-runnable operations: one parent document per batch",
+  "content": "Bulk-clearing child rows from a server script is awkward, so one parent document per operation keeps batches separate. A check at script entry blocks re-runs:\n\n```python\nif doc.status in (\"Mapped\", \"Processed\", \"Completed\"):\n    frappe.throw(\"Already processed. Please create a new document.\")\n```"
+ },
+ {
+  "seed_key": "reading-uploaded-files-from-a-server-script",
+  "topic": "pattern",
+  "title": "Reading uploaded files from a server script",
+  "content": "The server-script sandbox has no working API for reading file contents, and a File document's content is not accessible from it. Parsing the file in the browser (client script) and POSTing the parsed rows as a JSON string in `frappe.form_dict` works; the client reads the file with `fetch(file_url).then(r => r.text())`."
+ },
+ {
+  "seed_key": "rq-job-registry-ttl-asymmetry-when-polling-rq-job",
+  "topic": "pattern",
+  "title": "RQ Job registry TTL asymmetry when polling RQ Job status",
+  "content": "- Failed jobs persist **about 7 days** (`failure_ttl` = 604800s)\n- Successful jobs are cleared in **about 8 minutes** (`result_ttl` = 500s)\n\nImplication: when a job_id is missing AND its age is over about 120s, the job almost certainly **succeeded**, not failed. Treating a missing job as still queued leaves successes stuck in Queued forever.\n\nDecision tree that works:\n- exists + `failed` → mark Failed, copy `exc_info`\n- exists + `finished` → mark Completed\n- exists + `started` → mark Processing\n- missing AND age > 120s → mark Completed\n- missing AND fresh → leave alone"
+ },
+ {
+  "seed_key": "script-report-return-convention-result-columns-row",
+  "topic": "pattern",
+  "title": "Script Report return convention: `result = [columns, rows]`",
+  "content": "Seen on Frappe v15. Setting `data = [...]` in a Script Report makes Frappe return that list directly (not a 6-tuple) → `ValueError: too many values to unpack (expected 6)`.\n\n**Working pattern:**\n```python\nrows = frappe.db.sql(...)   # NOT named 'data'\ncolumns = [...]\nresult = [columns, rows]    # Frappe pads to 6 via ljust_list\n```\n\n`loc.get('data')` is falsy → Frappe falls through to `loc.get('result')` → `ljust_list(result, 6)` pads correctly."
+ },
+ {
+  "seed_key": "server-script-doctype-field-names",
+  "topic": "pattern",
+  "title": "Server Script DocType field names",
+  "content": "- The field linking a Server Script to a DocType is **`reference_doctype`**, NOT `dt`. `dt` is silently ignored → the script does not fire.\n- \"Before Save\" runs after `calculate_taxes_and_totals`, so a script that changes amounts there also has to update `grand_total`, `base_grand_total`, `rounded_total`, `base_rounded_total`, `outstanding_amount` and `in_words` itself."
+ },
+ {
+  "seed_key": "webhook-handler-reading-the-post-body",
+  "topic": "pattern",
+  "title": "Webhook handler: reading the POST body",
+  "content": "`frappe.request` returns None in the sandbox. `frappe.form_dict` holds the parsed body:\n```python\npayload = frappe.form_dict\nevent = payload.get(\"event\", \"\")\n```"
+ },
+ {
+  "seed_key": "background-job-monitor-left-successful-jobs-stuck",
+  "topic": "bug-fix",
+  "title": "Background job monitor left successful jobs stuck in Queued (RQ Job TTL)",
+  "content": "**Symptom:** every successful background job stayed in \"Queued\" status forever.\n**Root cause:** the monitor treated a missing RQ Job record as \"still queued, wait\", but successful jobs are cleared in about 8 minutes (RQ `result_ttl`) while failed jobs persist 7 days (`failure_ttl`).\n**Fix:** inverted the decision tree: job_id missing AND age > 120s → mark Completed (a failed job would still be in the registry). See the note on RQ Job registry TTL asymmetry."
+ },
+ {
+  "seed_key": "child-rows-appended-in-a-server-script-are-silentl",
+  "topic": "bug-fix",
+  "title": "Child rows appended in a server script are silently dropped on save",
+  "content": "**Symptom:** a server script appends rows to a child table and saves → the parent fields update but `items: []`.\n**Root cause:** `doc.save()` → `update_children()` uses a `frappe.db.sql` DELETE to clear stale rows → DELETE is blocked by the sandbox (SELECT-only) and the exception is swallowed.\n**Fix:** the server returns the data and a client script persists it (the server-returns / client-persists CSV upload pattern)."
+ },
+ {
+  "seed_key": "frappe-rename-doc-is-blocked-in-the-server-script",
+  "topic": "bug-fix",
+  "title": "`frappe.rename_doc` is blocked in the server-script sandbox",
+  "content": "Renaming a document from a Server Script fails: `frappe.rename_doc` is not available in safe_exec. Renaming works from the desk (the document's Rename action, for example on an Item) or with `bench execute frappe.rename_doc` on the server."
+ },
+ {
+  "seed_key": "payment-entry-from-a-guest-webhook-raises-permissi",
+  "topic": "bug-fix",
+  "title": "Payment Entry from a Guest webhook raises PermissionError",
+  "content": "**Symptom:** creating a Payment Entry from a webhook API script (`allow_guest = 1`) throws PermissionError.\n**Root cause:** `set_missing_values()` → `get_account_details()` hardcodes `frappe.has_permission(throw=True)`; `ignore_permissions=True` on insert comes too late.\n**Fix:** set `paid_from` / `paid_to` and the account currencies by hand before `set_missing_values()`, which skips the permission path. Or set `frappe.flags.ignore_permissions = True` before and reset it after. See the note on Payment Entry creation from a Guest context."
+ },
+ {
+  "seed_key": "serial-no-with-a-null-purchase-date-causes-a-repos",
+  "topic": "bug-fix",
+  "title": "Serial No with a NULL purchase_date causes a repost error on Item merge",
+  "content": "**Symptom:** an Item merge fails with \"You cannot repost item valuation before 1900-03-31\".\n**Root cause:** Serial No records with `purchase_date = NULL` (stored as `0000-00-00`).\n**Fix:** set `purchase_date` to the record's `creation` date on the affected Serial Nos. New Serial Nos with a null purchase_date bring the same error back."
+ }
+]
