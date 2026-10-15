@@ -11,3 +11,7 @@ page_renderer = ["erpsmith.oauth.WellKnownRenderer"]
 # A 401 for a bad, expired or revoked bearer token never reaches the endpoint, so it gets its challenge here
 # (v15 core adds none; v16 core adds one itself and replaces ours)
 after_request = ["erpsmith.mcp.add_www_authenticate"]
+
+# Put the seed notes in place (safe to repeat); a failure is logged, never raised
+after_install = "erpsmith.install.after_install"
+after_migrate = ["erpsmith.install.after_migrate"]

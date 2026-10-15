@@ -1,0 +1,5 @@
+[
+ {"seed_key": "test-sandbox-imports", "topic": "sandbox-rule", "title": "Imports raise ImportError in server scripts (test fixture)", "content": "Server scripts run in RestrictedPython. Any import statement raises ImportError; frappe, json and datetime are available as globals."},
+ {"seed_key": "test-child-rows", "topic": "pattern", "title": "Appending a child row (test fixture)", "content": "doc.append('items', {...}) adds a row to a child table before the parent is saved."},
+ {"seed_key": "test-rename-doc", "topic": "bug-fix", "title": "frappe.rename_doc is blocked in the sandbox (test fixture)", "content": "frappe.rename_doc is not callable from a server script; rename through the Desk or a whitelisted method."}
+]

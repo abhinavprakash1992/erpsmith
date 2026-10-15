@@ -4,7 +4,9 @@ A note is one MCP Memory row, shared by every user of the site. The DocType cont
 "title + blank line + content" whenever either changes, so search stays right however a note is edited.
 """
 
+import json
 import re
+from pathlib import Path
 
 import frappe
 from frappe.utils import get_datetime, now_datetime
@@ -146,3 +148,58 @@ def dump_memory(path=None):  # `path` is accepted for old callers and ignored: n
 			parts.append(f"\n---\n\n## {topic}\n")
 			parts += [f"\n### {r.title}\n\n_id: `{r.name}` · {_iso(r.creation)}_\n\n{r.content}\n" for r in notes]
 	return {"ok": True, "action": "dumped", "entries": len(rows), "markdown": "".join(parts)}
+
+
+SEED_PATH = Path(__file__).with_name("seed_memory.json")
+APPLIED_DEFAULT = "erpsmith_seeds_applied"
+SEED_KEY = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}$")
+
+
+def check_seeds(seeds):
+	"""ValueError unless `seeds` is a list of {seed_key, topic, title, content} with unique keys and valid text."""
+	if not isinstance(seeds, list):
+		raise ValueError("a seed file is a JSON list of notes")
+	keys = set()
+	for i, seed in enumerate(seeds):
+		if not isinstance(seed, dict) or set(seed) != {"seed_key", "topic", "title", "content"}:
+			raise ValueError(f"seed {i}: expected exactly seed_key, topic, title and content")
+		key = seed["seed_key"]
+		if not isinstance(key, str) or not SEED_KEY.match(key):
+			raise ValueError(f"seed {i}: bad seed_key {key!r} (lowercase letters, digits and dashes)")
+		if key in keys:
+			raise ValueError(f"seed {i}: duplicate seed_key {key!r}")
+		keys.add(key)
+		if seed["topic"] not in TOPICS:
+			raise ValueError(f"seed {key}: topic must be one of {', '.join(TOPICS)}")
+		if not all(isinstance(seed[f], str) and seed[f].strip() for f in ("title", "content")):
+			raise ValueError(f"seed {key}: title and content must be non-empty strings")
+		if len(seed["title"]) > MAX_TITLE_CHARS or len(seed["content"]) > MAX_CONTENT_CHARS:
+			raise ValueError(f"seed {key}: title or content is too long")
+
+
+def _applied_seed_keys():
+	# Read the table, not frappe.defaults: its cache can outlive a rolled-back transaction.
+	raw = frappe.db.get_value("DefaultValue", {"parent": "__default", "defkey": APPLIED_DEFAULT}, "defvalue")
+	return set(json.loads(raw)) if raw else set()
+
+
+def load_seeds(path=None):
+	"""Insert the seed notes this site has never received. Safe to run on every install and migrate:
+	a key already applied is skipped (so a note the user deleted stays deleted), a key whose note exists
+	but was never recorded is adopted, and a run with nothing new embeds nothing."""
+	seeds = json.loads(Path(path or SEED_PATH).read_text(encoding="utf-8"))
+	check_seeds(seeds)
+	applied = _applied_seed_keys()
+	todo = [s for s in seeds if s["seed_key"] not in applied]
+	inserted = present = 0
+	for seed in todo:
+		if frappe.db.exists(DOCTYPE, {"seed_key": seed["seed_key"]}):
+			present += 1  # an earlier run died before it recorded the key
+		else:
+			frappe.get_doc({"doctype": DOCTYPE, "name": f"seed__{seed['seed_key']}", "seed_key": seed["seed_key"],
+				"topic": seed["topic"], "title": seed["title"], "content": seed["content"]}).insert(ignore_permissions=True)
+			inserted += 1
+		applied.add(seed["seed_key"])
+	if todo:
+		frappe.db.set_default(APPLIED_DEFAULT, json.dumps(sorted(applied)))
+	return {"inserted": inserted, "already_present": present}
