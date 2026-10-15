@@ -42,5 +42,68 @@
     "title": "Get Current Plan",
     "description": "Inspect the current plan's status, approved changes, and which ones have been consumed. Useful for recovering mid-execution.",
     "inputSchema": {"type": "object", "properties": {}}
+  },
+  {
+    "name": "create_record",
+    "title": "Create Record",
+    "description": "Create a record in any DocType.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "data"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "data": {"type": "object", "description": "Field values as key-value pairs"}
+      }
+    }
+  },
+  {
+    "name": "update_record",
+    "title": "Update Record",
+    "description": "Update an existing record in any DocType.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "name", "data"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "name": {"type": "string"},
+        "data": {"type": "object"}
+      }
+    }
+  },
+  {
+    "name": "get_record",
+    "title": "Get Record",
+    "description": "Get a single record from any DocType.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "name"],
+      "properties": {"doctype": {"type": "string"}, "name": {"type": "string"}}
+    }
+  },
+  {
+    "name": "query_records",
+    "title": "Query Records",
+    "description": "Fetch records from any DocType with filters.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "filters": {"type": "array"},
+        "fields": {"type": "array", "items": {"type": "string"}},
+        "limit": {"type": "number", "description": "Max rows (default 50, capped at 200)"},
+        "orderBy": {"type": "string"}
+      }
+    }
+  },
+  {
+    "name": "delete_record",
+    "title": "Delete Record",
+    "description": "Delete a record from any DocType.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "name"],
+      "properties": {"doctype": {"type": "string"}, "name": {"type": "string"}}
+    }
   }
 ]

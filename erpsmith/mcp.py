@@ -183,7 +183,7 @@ def handle():
 
 
 # Tool modules register themselves with @tool on import.
-from erpsmith.tools import plan  # noqa: E402, F401
+from erpsmith.tools import plan, records  # noqa: E402, F401
 
 _missing = set(SCHEMAS) - set(IMPLS)
 if _missing:
