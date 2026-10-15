@@ -11,6 +11,9 @@ from erpsmith.tools.doctype import change_field
 def fix_broken_link(doctype, fieldname, correctDoctype):
 	if not frappe.db.exists("DocType", required_text("correctDoctype", correctDoctype)):
 		raise InvalidArguments(f"DocType {correctDoctype} does not exist; list_doctypes shows the DocTypes")
+	df = frappe.get_meta(required_text("doctype", doctype)).get_field(required_text("fieldname", fieldname))
+	if not df or df.fieldtype not in ("Link", "Table", "Table MultiSelect"):
+		raise InvalidArguments(f"{fieldname} is not a Link, Table or Table MultiSelect field of {doctype}")
 	method = change_field(doctype, fieldname, {"options": correctDoctype})
 	return {"fixed": fieldname, "doctype": doctype, "newOptions": correctDoctype, "method": method}
 
@@ -26,11 +29,14 @@ def fix_stuck_document(doctype, docName, targetState):
 		raise InvalidArguments(f"{targetState} is not a state of workflow {workflow}; its states are {', '.join(s.state for s in wf.states)}")
 	doc = frappe.get_doc(doctype, required_text("docName", docName))
 	doc.check_permission("write")
+	previous = doc.get(wf.workflow_state_field)
+	if previous and previous in [s.state for s in wf.states]:
+		raise InvalidArguments(f"{doc.name} is in state {previous}, a state of workflow {workflow}, so it is not stuck; "
+			"the workflow's normal actions apply")
 	if int(state.doc_status or 0) != doc.docstatus:
 		raise InvalidArguments(f"state {targetState} is for docstatus {state.doc_status}, but {doc.name} has docstatus {doc.docstatus}")
 	# db_set, not save(): save() runs the workflow's transition check, which rejects any move out of a state that no
 	# longer exists, the very thing being fixed. The comment keeps the bypass visible in the document's timeline.
-	previous = doc.get(wf.workflow_state_field)
 	doc.db_set(wf.workflow_state_field, targetState)
 	doc.add_comment("Edit", f"Workflow state changed from {previous} to {targetState} by fix_stuck_document")
 	return {"fixed": doc.name, "doctype": doctype, "previousState": previous, "newState": targetState}

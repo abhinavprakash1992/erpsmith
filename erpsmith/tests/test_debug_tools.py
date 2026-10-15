@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -72,6 +74,14 @@ class TestDebugTools(FrappeTestCase):
 		self.assertEqual(types(out), {"broken_link", "empty_select_options", "broken_depends_on", "invalid_fieldname"})
 		self.assertEqual(out["status"], "errors")
 		self.assertIn("fix_broken_link", [f.get("tool") for f in out["fixes"]])
+
+	def test_depends_on_may_use_standard_columns(self):
+		frappe.db.sql("update `tabDocField` set depends_on=%s where parent=%s and fieldname='notes'",
+			("eval:doc.docstatus==0 && !doc.__islocal && doc.name && doc.owner && doc.creation", GADGET))
+		frappe.clear_cache(doctype=GADGET)
+		err, out = call("debug_doctype_fields", {"doctype": GADGET})
+		self.assertFalse(err, out)
+		self.assertNotIn("broken_depends_on", types(out))
 
 	def test_permissions_for_a_role_and_for_a_child_table(self):
 		frappe.get_doc({"doctype": "Role", "role_name": ROLE}).insert()
@@ -155,6 +165,14 @@ class TestDebugTools(FrappeTestCase):
 		self.assertEqual(out["totalIssues"], 1)  # the workflow's open action
 		err, out = call("full_health_check", {"doctype": "ERPSmith Test Nothing"})
 		self.assertEqual(out["type"], "DoesNotExistError")
+
+	def test_a_failed_sub_check_makes_the_health_check_incomplete(self):
+		with patch("erpsmith.tools.debug.debug_permissions", side_effect=RuntimeError("boom")):
+			err, out = call("full_health_check", {"doctype": GADGET})
+		self.assertFalse(err, out)
+		self.assertEqual((out["status"], out["failedChecks"]), ("incomplete", ["permissions"]))
+		self.assertEqual(out["checks"]["permissions"], {"error": "boom"})
+		self.assertEqual(call("full_health_check", {"doctype": GADGET})[1]["failedChecks"], [])
 
 	def test_error_and_scheduler_logs(self):
 		method = f"erpsmith_test_method_{frappe.generate_hash(length=8)}"  # Error Log rows survive rollbacks, so earlier runs leave some

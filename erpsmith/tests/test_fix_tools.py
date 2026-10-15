@@ -57,10 +57,19 @@ class TestFixTools(FrappeTestCase):
 
 		err, out = run("fix_stuck_document", {"doctype": GADGET, "docName": doc.name, "targetState": "ERPSmith Nowhere"})
 		self.assertEqual(out["type"], "InvalidArguments")
+		doc.db_set("workflow_state", "ERPSmith Gone")
 		frappe.db.sql("update `tabWorkflow Document State` set doc_status='1' where parent=%s and state='Approved'", WORKFLOW)
 		err, out = run("fix_stuck_document", {"doctype": GADGET, "docName": doc.name, "targetState": "Approved"})
 		self.assertEqual(out["type"], "InvalidArguments")
 		self.assertIn("docstatus", out["message"])
+
+	def test_fix_stuck_document_refuses_a_document_in_a_valid_state(self):
+		doc = self.gadget()
+		self.assertEqual(doc.workflow_state, "Pending")
+		err, out = run("fix_stuck_document", {"doctype": GADGET, "docName": doc.name, "targetState": "Approved"})
+		self.assertEqual(out["type"], "InvalidArguments", out)
+		self.assertIn("not stuck", out["message"])
+		self.assertEqual(frappe.db.get_value(GADGET, doc.name, "workflow_state"), "Pending")
 
 	def test_activate_workflow(self):
 		frappe.db.set_value("Workflow", WORKFLOW, "is_active", 0)
@@ -115,6 +124,10 @@ class TestFixBrokenLink(FrappeTestCase):
 	def tearDown(self):
 		drop_doctype(GADGET)
 		forget_plans()
+
+	def test_fix_broken_link_only_changes_link_and_table_fields(self):
+		err, out = run("fix_broken_link", {"doctype": "ToDo", "fieldname": "description", "correctDoctype": "Note"})
+		self.assertEqual(out["type"], "InvalidArguments", out)
 
 	def test_fix_broken_link_points_the_field_at_an_existing_doctype(self):
 		err, out = run("fix_broken_link", {"doctype": GADGET, "fieldname": "related_note", "correctDoctype": "Note"})

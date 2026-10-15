@@ -148,7 +148,7 @@ def debug_doctype_fields(doctype):
 			issues.append(_issue("empty_select_options", "error", f"Select field {df.fieldname} has no options, so its dropdown is empty.", field=df.fieldname))
 			fixes.append({"type": "add_select_options", "field": df.fieldname, "tool": "update_field"})
 		for ref in re.findall(r"doc\.(\w+)", df.depends_on or ""):
-			if ref not in names:
+			if ref not in names and ref not in frappe.model.default_fields and ref not in ("__islocal", "__unsaved"):
 				issues.append(_issue("broken_depends_on", "error", f"depends_on of {df.fieldname} uses {ref}, which is not a field.", field=df.fieldname))
 		if df.fieldtype == "Dynamic Link" and df.options and df.options not in names:
 			issues.append(_issue("broken_dynamic_link", "error", f"Dynamic Link {df.fieldname} takes its DocType from {df.options}, which is not a field.", field=df.fieldname))
@@ -200,9 +200,11 @@ def debug_workflow(doctypeOrWorkflow):
 			issues.append(_issue("orphan_state", "warning", f"No transition leads into or out of state {state}."))
 	field = wf.workflow_state_field
 	if frappe.get_meta(wf.document_type).get_field(field):
-		rows = frappe.get_list(wf.document_type, filters=[["docstatus", "=", 0], [field, "is", "set"]], fields=["name", field],
-			limit_page_length=100)
-		stuck = [{"name": r.name, "state": r[field]} for r in rows if r[field] not in states]
+		filters = [["docstatus", "=", 0], [field, "is", "set"]]
+		if states:
+			filters.append([field, "not in", states])
+		rows = frappe.get_list(wf.document_type, filters=filters, fields=["name", field], limit_page_length=100)
+		stuck = [{"name": r.name, "state": r[field]} for r in rows]
 		if stuck:
 			issues.append(_issue("stuck_documents", "error", f"{len(stuck)} draft documents are in a state the workflow no longer has.", documents=stuck))
 			fixes.append({"type": "reset_stuck_documents", "tool": "fix_stuck_document", "documents": stuck})
@@ -319,4 +321,6 @@ def full_health_check(doctype):
 		"workflow": run(debug_workflow, workflow) if workflow else {"skipped": "No workflow"},
 	}
 	total = sum(c.get("issueCount", c.get("totalIssues", 0)) for c in checks.values())
-	return {"doctype": meta.name, "totalIssues": total, "status": "issues found" if total else "clean", "checks": checks}
+	failed = [name for name, c in checks.items() if "error" in c]  # a check that raised found nothing, which is not "clean"
+	status = "incomplete" if failed else "issues found" if total else "clean"
+	return {"doctype": meta.name, "totalIssues": total, "status": status, "failedChecks": failed, "checks": checks}
