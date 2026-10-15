@@ -106,8 +106,17 @@ class TestSync(FrappeTestCase):
 		with patch("erpsmith.vectors.embed", wraps=vectors.embed) as embed:
 			self.assertEqual(knowledge.sync([a, b, c], both), {"added": 0, "updated": 0, "unchanged": 3, "deleted": 0})
 			embed.assert_not_called()
-			self.assertEqual(knowledge.sync([a, {**b, "summary": "beta changed"}, c], both)["updated"], 1)
+			b2 = {**b, "summary": "beta changed"}
+			before = frappe.db.get_value(DOCTYPE, "doctype::B", ["summary", "content_hash", "vector"])
+			self.assertEqual(knowledge.sync([a, b2, c], both)["updated"], 1)
 			self.assertEqual(embed.call_count, 1)
+			after = frappe.db.get_value(DOCTYPE, "doctype::B", ["summary", "content_hash", "vector"])
+			self.assertEqual(after[0], "beta changed")
+			self.assertNotEqual(after[1], before[1])
+			self.assertEqual(after[1], knowledge._hash(b2))
+			self.assertNotEqual(after[2], before[2])
+			np.testing.assert_allclose(vectors.from_b64(after[2]), vectors.embed("beta changed"), atol=1e-6)
+			self.assertEqual(knowledge.sync([a, b2, c], both), {"added": 0, "updated": 0, "unchanged": 3, "deleted": 0})
 			self.assertEqual(knowledge.sync([a, c], both)["deleted"], 1)
 		self.assertFalse(frappe.db.exists(DOCTYPE, "doctype::B"))
 		self.assertEqual(frappe.db.get_value(DOCTYPE, "doctype::A", ["kind", "title", "source"]), ("doctype", "doctype::A", "/x"))
@@ -127,7 +136,7 @@ class TestSync(FrappeTestCase):
 		np.testing.assert_allclose(vectors.from_b64(stored), vectors.embed("only content"), atol=1e-6)
 
 	def test_every_field_is_part_of_the_hash(self):
-		for field, value in (("title", "other"), ("source", "/y"), ("summary", "other"), ("content", "other")):
+		for field, value in (("kind", "manual"), ("title", "other"), ("source", "/y"), ("summary", "other"), ("content", "other")):
 			empty_knowledge_table()
 			base = knowledge_chunk("doctype::A")
 			knowledge.sync([base], ("doctype",))
@@ -140,6 +149,20 @@ class TestSync(FrappeTestCase):
 		self.assertEqual([row.name for row, _ in vector_cache.search(DOCTYPE, query, 1, ("kind",))], ["doctype::A"])
 		knowledge.sync([], ("doctype",))
 		self.assertEqual(vector_cache.search(DOCTYPE, query, 1, ("kind",)), [])
+
+	def test_commit_every_commits_per_batch_of_writes_and_bumps_the_version(self):
+		keys = "ABCD"
+		knowledge.sync([knowledge_chunk(f"doctype::{k}") for k in keys], ("doctype",))
+		# A and B unchanged (not counted); C and D updated, E, F, G added: 5 writes
+		chunks = [knowledge_chunk(f"doctype::{k}") for k in "AB"]
+		chunks += [knowledge_chunk(f"doctype::{k}", summary="changed") for k in "CD"]
+		chunks += [knowledge_chunk(f"doctype::{k}") for k in "EFG"]
+		with patch("erpsmith.knowledge.frappe.db.commit") as commit, \
+				patch("erpsmith.knowledge.vector_cache.bump") as bump:
+			out = knowledge.sync(chunks, ("doctype",), commit_every=2)
+		self.assertEqual(out, {"added": 3, "updated": 2, "unchanged": 2, "deleted": 0})
+		self.assertEqual(commit.call_count, 3)  # after writes 2 and 4, then the final commit
+		self.assertEqual(bump.call_count, 3)  # one per mid-batch commit, plus one from invalidate at the end
 
 	def test_an_update_moves_modified_so_the_cache_fingerprint_sees_it(self):
 		chunk = knowledge_chunk("doctype::A", summary="alpha")

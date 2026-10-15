@@ -92,7 +92,7 @@ def doctype_chunks(intros=None, only=None):
 		except Exception:
 			frappe.log_error(title=f"ERPSmith: cannot read the DocType {row.name}")
 			continue
-		infos.append((meta, [f for f in meta.fields if f.fieldtype not in LAYOUT], apps.get(meta.module, "")))
+		infos.append((meta, [f for f in meta.fields if f.fieldtype not in LAYOUT], apps.get(meta.module) or ""))
 	refs, parents = defaultdict(list), defaultdict(list)  # target DocType -> "Source.field", child -> parents
 	for meta, fields, _ in infos:
 		for f in fields:
