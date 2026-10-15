@@ -257,11 +257,27 @@ class TestDangerousOps(FrappeTestCase):
 		guards.check_dangerous_op("call_method", bulk(10))
 
 	def test_set_value_on_child_tables_is_blocked(self):
-		sv = lambda f: {"method": "frappe.client.set_value", "args": {"doctype": "User", "name": "x", "fieldname": f}}
-		for fieldname in ("roles", "items", {"a": 1}):
-			with self.assertRaises(DangerousOp):
+		sv = lambda f, **extra: {"method": "frappe.client.set_value", "args": {"doctype": "User", "name": "x", "fieldname": f, **extra}}
+		for fieldname in ("roles", "items", {"a": 1}, ["roles"], '{"roles": []}', '{"first_name": "A"}'):
+			with self.assertRaises(DangerousOp, msg=fieldname):
 				guards.check_dangerous_op("call_method", sv(fieldname))
 		guards.check_dangerous_op("call_method", sv("first_name"))
+		guards.check_dangerous_op("call_method", sv("first_name", value="A"))
+		guards.check_dangerous_op("call_method", sv('{"x"', value="A"))  # not JSON, and a value is given: one plain field
+
+	def test_list_view_bulk_delete_over_10_is_blocked(self):
+		items = lambda n: {"method": "frappe.desk.reportview.delete_items", "args": {"doctype": "ToDo",
+			"items": json.dumps([str(i) for i in range(n)])}}
+		with self.assertRaisesRegex(DangerousOp, "11 records"):
+			guards.check_dangerous_op("call_method", items(11))
+		guards.check_dangerous_op("call_method", items(10))
+		guards.check_dangerous_op("call_method_read", items(11))  # rolled back, so nothing to block
+
+	def test_unusual_argument_shapes_do_not_crash_the_guard(self):
+		for args in ({"method": "frappe.client.set_value", "args": "x"}, {"method": "frappe.client.set_value", "args": None},
+				{"doctype": "User", "data": "password"}, {"method": "frappe.desk.reportview.delete_items", "args": {"items": "not json"}}):
+			guards.check_dangerous_op("call_method", args)
+			guards.check_dangerous_op("update_record", args)
 
 
 class TestPlanToolsOverMCP(FrappeTestCase):

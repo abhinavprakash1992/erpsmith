@@ -706,5 +706,31 @@
       "required": ["doctype", "recordName", "fieldname", "value"],
       "properties": {"doctype": {"type": "string"}, "recordName": {"type": "string"}, "fieldname": {"type": "string"}, "value": {"description": "The value to set"}}
     }
+  },
+  {
+    "name": "call_method",
+    "title": "Call Method",
+    "description": "Calls a whitelisted Frappe or ERPNext Python method, the same methods the REST API serves at /api/method/<dotted.path> (https://docs.frappe.io/framework/user/en/api/server-calls), with keyword arguments, as the signed-in user, and keeps its database changes. Use for an operation no other tool covers; call_method_read runs a method with its changes rolled back. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["method"],
+      "properties": {
+        "method": {"type": "string", "description": "Dotted path of a whitelisted function, e.g. frappe.client.set_value"},
+        "args": {"type": "object", "description": "Keyword arguments for the method"}
+      }
+    }
+  },
+  {
+    "name": "call_method_read",
+    "title": "Call Method (Read Only)",
+    "description": "Calls a whitelisted Frappe or ERPNext Python method, the same methods the REST API serves at /api/method/<dotted.path> (https://docs.frappe.io/framework/user/en/api/server-calls), as the signed-in user, and rolls back every database change it makes; a method that commits is refused. Use to read data no other tool returns, e.g. frappe.client.get_count. Emails or HTTP calls a method sends itself are not undone.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["method"],
+      "properties": {
+        "method": {"type": "string", "description": "Dotted path of a whitelisted function, e.g. frappe.client.get_count"},
+        "args": {"type": "object", "description": "Keyword arguments for the method"}
+      }
+    }
   }
 ]

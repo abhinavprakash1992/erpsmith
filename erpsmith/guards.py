@@ -166,6 +166,19 @@ def check_gate(tool, args):
 	)
 
 
+BULK_DELETE_LIMIT = 10
+
+
+def _json_value(value, default=None):
+	"""`value` parsed as JSON when it is a string, else `value` itself; `default` when the string is not JSON."""
+	if not isinstance(value, str):
+		return value
+	try:
+		return json.loads(value)
+	except ValueError:
+		return default
+
+
 PROTECTED_DOCTYPES = {"User", "Role", "DocType", "Module Def", "System Settings", "Accounts Settings", "Stock Settings", "Company"}
 USER_SECURITY_FIELDS = ("roles", "password", "new_password", "api_key", "api_secret", "user_type", "enabled")
 CHILD_TABLE_FIELDS = {"roles", "permissions", "items", "taxes"}
@@ -173,8 +186,9 @@ CHILD_TABLE_FIELDS = {"roles", "permissions", "items", "taxes"}
 
 def check_dangerous_op(tool, args):
 	"""Operations blocked even with an approved plan (RULE 16)."""
-	if tool in ("create_record", "update_record") and args.get("doctype") == "User":
-		attempting = [f for f in USER_SECURITY_FIELDS if f in (args.get("data") or {})]
+	data = args.get("data")
+	if tool in ("create_record", "update_record") and args.get("doctype") == "User" and isinstance(data, dict):
+		attempting = [f for f in USER_SECURITY_FIELDS if f in data]
 		if attempting:
 			raise DangerousOp(
 				f"DANGEROUS OP BLOCKED — Never modify User.{', '.join(attempting)} through the API.\n"
@@ -190,15 +204,25 @@ def check_dangerous_op(tool, args):
 			f"DANGEROUS OP BLOCKED — Deleting from '{args['doctype']}' can break ERPNext entirely.\n"
 			"If you genuinely need this, do it in Desk with proper confirmation. See RULE 16."
 		)
-	method, margs = args.get("method"), args.get("args") or {}
-	if tool == "call_method" and method == "frappe.client.delete" and isinstance(margs.get("names"), list) and len(margs["names"]) > 10:
+	if tool != "call_method":
+		return
+	method, margs = args.get("method"), args.get("args")
+	margs = margs if isinstance(margs, dict) else {}
+	bulk = None
+	if method == "frappe.client.delete" and isinstance(margs.get("names"), list):
+		bulk = margs["names"]
+	elif method == "frappe.desk.reportview.delete_items":  # the list view's bulk delete; items is a JSON list
+		bulk = _json_value(margs.get("items"))
+	if isinstance(bulk, list) and len(bulk) > BULK_DELETE_LIMIT:
 		raise DangerousOp(
-			f"DANGEROUS OP BLOCKED — Bulk delete of {len(margs['names'])} records in one call.\n"
+			f"DANGEROUS OP BLOCKED — Bulk delete of {len(bulk)} records in one call.\n"
 			"Max 10 per call. Split into batches and get approval for each batch. See RULE 16."
 		)
-	if tool == "call_method" and method == "frappe.client.set_value":
+	if method == "frappe.client.set_value":
 		fieldname = margs.get("fieldname")
-		if isinstance(fieldname, dict) or fieldname in CHILD_TABLE_FIELDS:
+		if isinstance(fieldname, str) and not margs.get("value"):
+			fieldname = _json_value(fieldname, fieldname)  # set_value reads a JSON object string as several fields
+		if isinstance(fieldname, (dict, list)) or (isinstance(fieldname, str) and fieldname in CHILD_TABLE_FIELDS):
 			raise DangerousOp(
 				f"DANGEROUS OP BLOCKED — frappe.client.set_value with fieldname='{fieldname}' replaces the entire child table.\n"
 				"Use update_record instead, which sends the full document. See RULE 16."
