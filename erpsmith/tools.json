@@ -1,1 +1,46 @@
-[]
+[
+  {
+    "name": "submit_plan",
+    "title": "Submit Plan",
+    "description": "Records the write operations you intend to make (create_*, update_*, delete_*, add_*, remove_*, set_*, apply_*, fix_*, activate_*, rename_*, reorder_*, call_method) and returns a planId. Write tools on this server are rejected until the plan is approved with approve_plan, and each write must match one plan entry's tool and args exactly. Use before any write, then present the returned plan to the user for approval.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["summary", "changes"],
+      "properties": {
+        "summary": {"type": "string", "description": "Plain-English summary of what will happen and why."},
+        "changes": {
+          "type": "array",
+          "description": "Ordered list of every mutating tool call you intend to make.",
+          "items": {
+            "type": "object",
+            "required": ["tool", "args"],
+            "properties": {
+              "tool": {"type": "string", "description": "Exact tool name, e.g. 'create_record'"},
+              "args": {"type": "object", "description": "Exact args object that will be passed to the tool"},
+              "reason": {"type": "string", "description": "Why this step is needed"}
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "approve_plan",
+    "title": "Approve Plan",
+    "description": "Approves a submitted plan so its writes can run, for ttlMinutes (default 15). Use after the user has explicitly approved the plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["planId"],
+      "properties": {
+        "planId": {"type": "string", "description": "planId returned by submit_plan"},
+        "ttlMinutes": {"type": "number", "description": "Approval validity in minutes (default 15)"}
+      }
+    }
+  },
+  {
+    "name": "get_current_plan",
+    "title": "Get Current Plan",
+    "description": "Inspect the current plan's status, approved changes, and which ones have been consumed. Useful for recovering mid-execution.",
+    "inputSchema": {"type": "object", "properties": {}}
+  }
+]

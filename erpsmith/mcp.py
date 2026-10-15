@@ -13,6 +13,7 @@ import frappe
 from werkzeug.wrappers import Response
 
 import erpsmith
+from erpsmith import guards
 
 SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 _HERE = Path(__file__).parent
@@ -115,6 +116,8 @@ def call_tool(name, args):
 		return _error_result(LookupError(f"Unknown tool: {name}"))
 	frappe.db.savepoint("mcp_tool")
 	try:
+		guards.check_gate(name, args)
+		guards.check_dangerous_op(name, args)
 		result = impl(**args)
 		text = json.dumps(result, indent=2, default=str)
 	except Exception as e:
@@ -180,6 +183,8 @@ def handle():
 
 
 # Tool modules register themselves with @tool on import.
+from erpsmith.tools import plan  # noqa: E402, F401
+
 _missing = set(SCHEMAS) - set(IMPLS)
 if _missing:
 	raise RuntimeError(f"tools.json entries without an implementation: {sorted(_missing)}")

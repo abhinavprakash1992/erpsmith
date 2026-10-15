@@ -1,0 +1,26 @@
+{
+ "actions": [],
+ "creation": "2026-10-15 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["tool", "args", "reason", "consumed", "consumed_at"],
+ "fields": [
+  {"fieldname": "tool", "fieldtype": "Data", "in_list_view": 1, "label": "Tool", "read_only": 1, "reqd": 1},
+  {"fieldname": "args", "fieldtype": "Code", "in_list_view": 1, "label": "Args", "options": "JSON", "read_only": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "read_only": 1},
+  {"default": "0", "fieldname": "consumed", "fieldtype": "Check", "in_list_view": 1, "label": "Consumed", "read_only": 1},
+  {"fieldname": "consumed_at", "fieldtype": "Datetime", "label": "Consumed At", "read_only": 1}
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPSmith",
+ "name": "MCP Plan Change",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": []
+}
