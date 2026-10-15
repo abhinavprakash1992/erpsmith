@@ -67,6 +67,8 @@ def suggestion(e):
 		return "The error names the upgrade-safe tools that change a standard DocType."
 	if "not whitelisted" in msg:
 		return "Only whitelisted methods can be called, and the dotted path may be wrong."
+	if msg.startswith("The script would fail in Frappe's sandbox"):
+		return "Each listed line names a replacement that runs in the sandbox. See RULE 1."
 	if isinstance(e, InvalidArguments):
 		return "An argument is missing or out of range; the tool's input schema in tools/list shows what it takes."
 	if isinstance(e, frappe.PermissionError):
