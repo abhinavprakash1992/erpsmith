@@ -6,7 +6,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from erpsmith import install, memory, vectors
+from erpsmith import install, knowledge, memory, vectors
 from erpsmith.tests.helpers import counted_sessions, forget_seeds
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -95,12 +95,13 @@ class TestInstallHooks(FrappeTestCase):
 
 	def test_both_hooks_load_the_seed(self):
 		for hook in (install.after_install, install.after_migrate):
-			with patch.object(memory, "load_seeds") as load:
+			with patch.object(memory, "load_seeds") as load, patch.object(knowledge, "enqueue_build"):
 				hook()
 			load.assert_called_once_with()
 
-	def test_a_failing_seed_load_does_not_stop_an_install(self):
+	def test_a_failing_seed_load_does_not_stop_an_install_or_the_knowledge_build(self):
 		with patch.object(memory, "load_seeds", side_effect=RuntimeError("boom")), \
-				patch.object(install.frappe, "log_error") as log:
+				patch.object(knowledge, "enqueue_build") as queue, patch.object(install.frappe, "log_error") as log:
 			install.after_install()
 		log.assert_called_once()
+		queue.assert_called_once_with()

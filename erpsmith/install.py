@@ -1,11 +1,11 @@
-"""after_install and after_migrate: put the seed notes in place.
+"""after_install and after_migrate: put the seed notes in place and queue the knowledge build.
 
 Both hooks run again on every migrate, and neither may stop an install or a migrate.
 """
 
 import frappe
 
-from erpsmith import memory
+from erpsmith import knowledge, memory
 
 
 def after_install():
@@ -21,3 +21,4 @@ def _setup():
 		memory.load_seeds()
 	except Exception:
 		frappe.log_error(title="ERPSmith: loading the seed memory failed")
+	knowledge.enqueue_build()  # logs its own failure

@@ -6,10 +6,13 @@ docs.erpnext.com. A chunk is embedded again only when its content hash changed.
 """
 
 import hashlib
+import json
+import re
 from collections import defaultdict
 from urllib.parse import quote
 
 import frappe
+import requests
 
 from erpsmith import vector_cache, vectors
 
@@ -139,3 +142,120 @@ def sync(chunks, delete_kinds, commit_every=0):
 	if commit_every:
 		frappe.db.commit()
 	return counts
+
+
+MANUAL_URL = "https://docs.erpnext.com/api/resource/Wiki%20Page"
+MANUAL_BASE = "https://docs.erpnext.com/"
+CHUNK_CHARS = 1500
+MIN_CHUNK_CHARS = 80
+COMMIT_EVERY = 200
+
+
+def fetch_manual():
+	"""The published user manual's pages [{title, route, content}], or None when they cannot be read
+	(logged; the build goes on without the manual)."""
+	try:
+		response = requests.get(MANUAL_URL, timeout=120, params={
+			"fields": json.dumps(["title", "route", "content"]),
+			"filters": json.dumps([["route", "like", "docs/user/%"], ["published", "=", 1]]),
+			"limit_page_length": "0",
+		})
+		response.raise_for_status()
+		pages = response.json()["data"]
+		if not isinstance(pages, list):
+			raise ValueError("the manual's response has no list of pages")
+		return [p for p in pages if isinstance(p, dict) and isinstance(p.get("route"), str)]
+	except Exception:
+		frappe.log_error(title="ERPSmith: could not fetch the ERPNext manual")
+		return None
+
+
+def _clean(markdown):
+	markdown = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", markdown)  # images
+	markdown = re.sub(r"<[^>]+>", "", markdown)  # stray HTML
+	return re.sub(r"\n{3,}", "\n\n", markdown).strip()
+
+
+def _split_long(text):
+	if len(text) <= CHUNK_CHARS:
+		return [text]
+	parts, current = [], ""
+	for paragraph in text.split("\n\n"):
+		if current and len(current) + len(paragraph) > CHUNK_CHARS:
+			parts.append(current)
+			current = ""
+		current += ("\n\n" if current else "") + paragraph
+	if current:
+		parts.append(current)
+	return parts
+
+
+def manual_chunks(pages):
+	"""Chunks of the manual: a page is cut at its '## ' headings, long sections at paragraph breaks, and
+	every chunk starts with the page title so it makes sense on its own."""
+	chunks = []
+	for page in pages:
+		if not isinstance(page, dict) or not isinstance(page.get("route"), str):
+			continue
+		title = (page.get("title") or "").strip()
+		digest = hashlib.sha256(page["route"].encode("utf-8")).hexdigest()[:16]
+		n = 0
+		for section in re.split(r"\n(?=## )", _clean(page.get("content") or "")):
+			for part in _split_long(section):
+				if len(part) < MIN_CHUNK_CHARS:
+					continue
+				text = f"# {title}\n\n{part}"
+				chunks.append({"kind": "manual", "chunk_key": f"manual::{digest}::{n}", "title": title[:140],
+					"source": MANUAL_BASE + page["route"], "summary": text, "content": text})
+				n += 1
+	return chunks
+
+
+def _intro(content):
+	"""The text of a manual chunk after its '# title' line, cut to 500 characters."""
+	return content.split("\n\n", 1)[1][:500] if "\n\n" in content else ""
+
+
+def _intros(chunks):
+	"""{page title: opening text of its first chunk}, used as the 'what is this for' prose in a DocType's summary."""
+	intros = {}
+	for chunk in chunks:
+		if chunk["chunk_key"].endswith("::0"):
+			intros.setdefault(chunk["title"], _intro(chunk["content"]))
+	return intros
+
+
+def _stored_intros():
+	"""The same, read from the manual chunks already stored, for a build that could not fetch the manual."""
+	rows = frappe.get_all(DOCTYPE, filters={"kind": "manual", "chunk_key": ["like", "%::0"]}, fields=["title", "content"])
+	return {r.title: _intro(r.content) for r in rows}
+
+
+def build(include_manual=True, commit=True, only_doctypes=None):
+	"""Bring the knowledge chunks up to date. Runs as ONE background job (an RQ work horse is forked per job,
+	so the embedding model loads once per build, not once per chunk) and never calls mcp.call_tool.
+
+	    bench --site <site> execute erpsmith.knowledge.build
+
+	A manual that cannot be fetched is logged and skipped: the stored manual chunks stay, and the DocType chunks keep
+	the intros they had. Stale DocType chunks are deleted only on a full build (`only_doctypes` unset), stale manual
+	chunks only when the manual was fetched."""
+	pages = fetch_manual() if include_manual else None
+	manual = manual_chunks(pages) if pages is not None else []
+	intros = _intros(manual) if pages is not None else _stored_intros()
+	chunks = doctype_chunks(intros=intros, only=only_doctypes) + manual
+	delete_kinds = (("doctype",) if only_doctypes is None else ()) + (("manual",) if pages is not None else ())
+	counts = sync(chunks, delete_kinds, COMMIT_EVERY if commit else 0)
+	counts["manual"] = (f"{len(pages)} pages" if pages is not None
+		else "not requested" if not include_manual else "skipped: could not be fetched")
+	return counts
+
+
+def enqueue_build():
+	"""Queue the build as one long job (once: a second request while it waits or runs is dropped). A failure to
+	queue it, for example Redis being down during an install, is logged and must not fail the install."""
+	try:
+		frappe.enqueue("erpsmith.knowledge.build", queue="long", timeout=3600, job_id="erpsmith-knowledge-build",
+			deduplicate=True, enqueue_after_commit=True)
+	except Exception:
+		frappe.log_error(title="ERPSmith: could not queue the knowledge build")
