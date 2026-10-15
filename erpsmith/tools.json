@@ -2,7 +2,7 @@
   {
     "name": "submit_plan",
     "title": "Submit Plan",
-    "description": "Records the write operations you intend to make (every tool that is not read-only, apart from the plan and memory tools) and returns a planId. Write tools on this server are rejected until the plan is approved with approve_plan, and each write must match one plan entry's tool and args exactly. Use before any write, then present the returned plan to the user for approval.",
+    "description": "Records the write operations you intend to make (every tool that is not read-only, apart from the plan and memory tools) and returns a planId. Write tools on this server are rejected until the plan is approved with approve_plan, and each write must match one plan entry's tool and args exactly. The plan is shown to the user and applies once approved.",
     "inputSchema": {
       "type": "object",
       "required": ["summary", "changes"],

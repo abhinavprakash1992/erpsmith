@@ -63,5 +63,6 @@ def call_method_read(method, args=None):
 	try:
 		result = _call(method, args)
 	finally:
-		mcp.undo_tool_writes(READ_SAVEPOINT)  # also drops _refuse_commit and whatever the method queued for a commit
-	return {"method": method, "result": result, "rolledBack": True}
+		# also drops _refuse_commit and whatever the method queued for a commit
+		rolled_back = mcp.undo_tool_writes(READ_SAVEPOINT)  # False: the savepoint was lost, a commit outside Frappe's paths may persist
+	return {"method": method, "result": result, "rolledBack": rolled_back}

@@ -199,7 +199,7 @@ def check_dangerous_op(tool, args):
 				"  • API keys → Desk: User > [user] > API Access\n"
 				"See RULE 16."
 			)
-	if tool == "delete_record" and args.get("doctype") in PROTECTED_DOCTYPES:
+	if tool == "delete_record" and isinstance(args.get("doctype"), str) and args["doctype"] in PROTECTED_DOCTYPES:
 		raise DangerousOp(
 			f"DANGEROUS OP BLOCKED — Deleting from '{args['doctype']}' can break ERPNext entirely.\n"
 			"If you genuinely need this, do it in Desk with proper confirmation. See RULE 16."

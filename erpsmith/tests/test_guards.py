@@ -278,6 +278,8 @@ class TestDangerousOps(FrappeTestCase):
 				{"doctype": "User", "data": "password"}, {"method": "frappe.desk.reportview.delete_items", "args": {"items": "not json"}}):
 			guards.check_dangerous_op("call_method", args)
 			guards.check_dangerous_op("update_record", args)
+		for doctype in (["User"], {"a": 1}, None):  # delete_record with a doctype that is not a string
+			guards.check_dangerous_op("delete_record", {"doctype": doctype, "name": "x"})
 
 
 class TestPlanToolsOverMCP(FrappeTestCase):

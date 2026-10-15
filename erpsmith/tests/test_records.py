@@ -1,7 +1,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from erpsmith.tests.helpers import approved, call, run
+from erpsmith.tests.helpers import approved, call, drop_doctype, forget_plans, run
 
 RESTRICTED = "mcp-restricted@example.com"
 VICTIM = "mcp-victim@example.com"
@@ -210,3 +210,19 @@ class TestRecords(FrappeTestCase):
 		row = frappe.db.get_value("ToDo", out["updated"], ["owner", "creation", "description"], as_dict=True)
 		self.assertEqual((row.owner, row.description), ("Administrator", "still mine"))
 		self.assertNotEqual(str(row.creation)[:4], "2001")
+
+
+class TestCreateRecordDocstatus(FrappeTestCase):
+	"""Its own class: making a DocType commits, which would make TestRecords' uncommitted rows permanent."""
+
+	def test_create_record_saves_a_draft_unless_docstatus_is_1(self):
+		name = "ERPSmith Test Submittable"
+		self.addCleanup(forget_plans)
+		self.addCleanup(drop_doctype, name)  # DocType creation commits, so the class rollback cannot remove it
+		frappe.get_doc({"doctype": "DocType", "name": name, "module": "Custom", "custom": 1, "is_submittable": 1,
+			"fields": [{"fieldname": "title", "label": "Title", "fieldtype": "Data"}],
+			"permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1, "submit": 1, "cancel": 1}]}).insert()
+		for extra, want in (({}, 0), ({"docstatus": 1}, 1)):
+			err, out = run("create_record", {"doctype": name, "data": {"title": "t", **extra}})
+			self.assertFalse(err, out)
+			self.assertEqual(frappe.db.get_value(name, out["name"], "docstatus"), want, extra)

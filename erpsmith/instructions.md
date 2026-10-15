@@ -8,7 +8,7 @@ search_memory finds this site's saved reference notes by meaning: Frappe sandbox
 search_erpnext_knowledge covers this site's DocType structure (custom fields included) and the ERPNext user manual. add_memory saves a new fact, fix or pattern for next time. Memory is shared by every user of the site and needs the System Manager role.
 
 RULE 1 — NO PYTHON IMPORTS IN SERVER SCRIPTS
-Server Scripts, API scripts and Script Reports run in Frappe's RestrictedPython sandbox: every import raises ImportError, and frappe and json are already available (date helpers live in frappe.utils). create_server_script, update_server_script, apply_script_fix and create_report check a script against the sandbox's limits before saving it, and name a working replacement for each problem. search_memory("server script sandbox") finds more patterns.
+Server Scripts, API scripts and Script Reports run in Frappe's RestrictedPython sandbox: every import raises ImportError, and frappe and json are already available (date helpers live in frappe.utils). create_server_script, update_server_script, apply_script_fix and create_report check a script against the sandbox's limits before saving it and report each problem by line, naming a working replacement where there is one. search_memory("server script sandbox") finds more patterns.
 
 RULE 10 — PLAN GATE
 Every tool that changes something (each tool without readOnlyHint, apart from submit_plan, approve_plan and the memory tools) is rejected until a plan covering it is approved:
@@ -21,7 +21,7 @@ RULE 13 — DRAFTS
 create_record saves a submittable document as a draft (docstatus 0) unless its data sets docstatus to 1, which submits it.
 
 RULE 16 — BLOCKED OPERATIONS
-Rejected even with an approved plan: create_record or update_record on a User that sets roles, password, new_password, api_key, api_secret, user_type or enabled; delete_record on User, Role, DocType, Module Def, Company, System Settings, Accounts Settings or Stock Settings; call_method deleting more than 10 records at once (frappe.client.delete with a names list, or frappe.desk.reportview.delete_items); call_method frappe.client.set_value on the roles, permissions, items or taxes table or on several fields at once. delete_doctype and rename_doctype refuse standard DocTypes, and remove_field refuses a standard DocType's own fields. The error names the safe channel; everything else is bounded by the signed-in user's own permissions.
+Rejected even with an approved plan: create_record or update_record on a User that sets roles, password, new_password, api_key, api_secret, user_type or enabled; delete_record on User, Role, DocType, Module Def, Company, System Settings, Accounts Settings or Stock Settings; call_method deleting more than 10 records at once through the list view's frappe.desk.reportview.delete_items; call_method frappe.client.set_value on the roles, permissions, items or taxes table, or with an object or list of fields instead of one fieldname. delete_doctype and rename_doctype refuse standard DocTypes, and remove_field refuses a standard DocType's own fields. The error names the safe channel; everything else is bounded by the signed-in user's own permissions.
 
 RULE 17 — AFTER 3 FAILED ATTEMPTS
 When the same approach has failed three times, the most useful next step is to state the limitation and give the user the exact bench execute, SQL or UI steps to finish it themselves.

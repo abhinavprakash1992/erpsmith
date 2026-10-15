@@ -2,6 +2,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from erpsmith.tests.helpers import call, run
+from erpsmith.tools import methods
 
 PROBE = "erpsmith call_method probe"
 
@@ -59,17 +60,19 @@ class TestCallMethod(FrappeTestCase):
 	def test_call_method_read_rolls_back_and_needs_no_plan(self):
 		err, out = call("call_method_read", {"method": f"{HERE}.write_probe"})
 		self.assertFalse(err, out)
-		self.assertTrue(out["rolledBack"])
+		self.assertIs(out["rolledBack"], True)
 		self.assertEqual(out["result"]["description"], PROBE)
 		self.assertFalse(frappe.db.exists("ToDo", {"description": PROBE}))
+		frappe.db.before_commit.run()  # what the request's own commit runs: nothing of the call may still be queued
+		frappe.db.after_commit.run()
 		err, out = call("call_method_read", {"method": "frappe.client.get_count", "args": {"doctype": "User"}})
 		self.assertFalse(err, out)
 		self.assertGreater(out["result"], 0)
 
 	def test_call_method_read_refuses_a_method_that_commits_even_twice(self):
-		err, out = call("call_method_read", {"method": f"{HERE}.commit_twice"})
-		self.assertTrue(err)
-		self.assertIn("call_method_read rolls back", out["message"])
+		# called directly: mcp.call_tool's own error path also resets the commit callbacks, which would hide a missing cleanup here
+		with self.assertRaisesRegex(frappe.ValidationError, "call_method_read rolls back"):
+			methods.call_method_read(method=f"{HERE}.commit_twice")
 		self.assertFalse(frappe.db.exists("ToDo", {"description": PROBE}))
 		frappe.db.before_commit.run()  # what the request's own commit runs first: it would raise if the refusal were still queued
 
