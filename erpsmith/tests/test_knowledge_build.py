@@ -62,6 +62,13 @@ class TestManualChunks(FrappeTestCase):
 		page = {"title": "T" * 300, "route": "docs/user/manual/en/t", "content": paragraphs(2)}
 		self.assertTrue(all(len(c["title"]) == 140 for c in knowledge.manual_chunks([page])))
 
+	def test_a_page_with_a_non_text_title_or_content_does_not_break_the_others(self):
+		odd = [{"title": 5, "route": "docs/user/manual/en/a", "content": paragraphs(2)},
+			{"title": "Number", "route": "docs/user/manual/en/b", "content": 12345}]
+		self.assertEqual(knowledge.manual_chunks(PAGES + odd)[:len(knowledge.manual_chunks(PAGES))], knowledge.manual_chunks(PAGES))
+		titles = [c["title"] for c in knowledge.manual_chunks(odd)]
+		self.assertTrue(titles and set(titles) == {""})  # untitled chunks for the first page, nothing for the second
+
 	def test_intros_come_from_the_first_chunk_of_each_page(self):
 		intros = knowledge._intros(knowledge.manual_chunks(PAGES))
 		self.assertTrue(intros["Role"].startswith("A Role is a set of permissions"))
@@ -89,6 +96,8 @@ class TestFetchManual(FrappeTestCase):
 			{"return_value": reply({"exc": "Traceback ..."})},
 			{"return_value": reply({"data": "oops"})},
 			{"return_value": reply(["not", "a", "dict"])},
+			{"return_value": reply({"data": []})},
+			{"return_value": reply({"data": [{"title": "no route"}, {"title": "route is a number", "route": 5}]})},
 		]
 		for kwargs in failures:
 			with patch("erpsmith.knowledge.requests.get", **kwargs), patch("erpsmith.knowledge.frappe.log_error") as log:
@@ -126,6 +135,16 @@ class TestBuild(FrappeTestCase):
 		out = self.run_build(None)
 		self.assertEqual(out["manual"], "skipped: could not be fetched")
 		self.assertEqual((out["added"], out["updated"], out["deleted"]), (0, 0, 0))  # DocType summaries kept their intros
+		self.assertEqual(frappe.db.count(DOCTYPE, {"kind": "manual"}), before)
+
+	def test_an_empty_manual_response_keeps_the_stored_chunks(self):
+		self.run_build(PAGES)
+		before = frappe.db.count(DOCTYPE, {"kind": "manual"})
+		with patch("erpsmith.knowledge.requests.get", return_value=reply({"data": []})), \
+				patch("erpsmith.knowledge.frappe.log_error"):
+			out = knowledge.build(commit=False, only_doctypes=self.ONLY)
+		self.assertEqual(out["manual"], "skipped: could not be fetched")
+		self.assertEqual((out["added"], out["updated"], out["deleted"]), (0, 0, 0))
 		self.assertEqual(frappe.db.count(DOCTYPE, {"kind": "manual"}), before)
 
 	def test_a_manual_that_was_not_requested_is_reported_as_such(self):

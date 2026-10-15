@@ -164,7 +164,10 @@ def fetch_manual():
 		pages = response.json()["data"]
 		if not isinstance(pages, list):
 			raise ValueError("the manual's response has no list of pages")
-		return [p for p in pages if isinstance(p, dict) and isinstance(p.get("route"), str)]
+		pages = [p for p in pages if isinstance(p, dict) and isinstance(p.get("route"), str)]
+		if not pages:  # an empty answer must not look like an empty manual: the build would delete every stored chunk
+			raise ValueError("the manual's response has no pages")
+		return pages
 	except Exception:
 		frappe.log_error(title="ERPSmith: could not fetch the ERPNext manual")
 		return None
@@ -197,10 +200,11 @@ def manual_chunks(pages):
 	for page in pages:
 		if not isinstance(page, dict) or not isinstance(page.get("route"), str):
 			continue
-		title = (page.get("title") or "").strip()
+		title, content = page.get("title"), page.get("content")
+		title = title.strip() if isinstance(title, str) else ""
 		digest = hashlib.sha256(page["route"].encode("utf-8")).hexdigest()[:16]
 		n = 0
-		for section in re.split(r"\n(?=## )", _clean(page.get("content") or "")):
+		for section in re.split(r"\n(?=## )", _clean(content if isinstance(content, str) else "")):
 			for part in _split_long(section):
 				if len(part) < MIN_CHUNK_CHARS:
 					continue
