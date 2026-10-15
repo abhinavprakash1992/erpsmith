@@ -174,16 +174,16 @@ class TestMemoryTools(FrappeTestCase):
 		self.assertLessEqual(len(out["query"]), memory.MAX_QUERY_CHARS)
 
 	def test_search_sees_writes_and_not_rolled_back_ones(self):
-		schema = {"name": "memory_boom_test", "title": "Boom", "description": "test only",
+		schema = {"name": "get_memory_boom_test", "title": "Boom", "description": "test only",
 			"inputSchema": {"type": "object", "properties": {}}}
 		call("search_memory", {"query": "ghost"})  # warm this worker's cache before the failing call
-		with patch.dict(mcp.SCHEMAS, {"memory_boom_test": schema}), patch.dict(mcp.IMPLS, {}):
+		with patch.dict(mcp.SCHEMAS, {"get_memory_boom_test": schema}), patch.dict(mcp.IMPLS, {}):
 			def boom():
 				memory.add_memory("pattern", "Ghost note", "written, then the tool fails")
 				raise frappe.ValidationError("boom")
 
-			mcp.tool("memory_boom_test")(boom)
-			err, _ = call("memory_boom_test")
+			mcp.tool("get_memory_boom_test")(boom)
+			err, _ = call("get_memory_boom_test")
 		self.assertTrue(err)
 		_, found = call("search_memory", {"query": "Ghost note written then the tool fails"})
 		self.assertNotIn("Ghost note", [r["title"] for r in found["results"]])

@@ -10,8 +10,11 @@ import json
 import frappe
 from frappe.utils import add_to_date, get_datetime, now_datetime
 
-MUTATING_PREFIXES = ("create_", "update_", "delete_", "add_", "remove_", "set_", "apply_", "fix_", "activate_", "rename_", "reorder_")
-UNGATED = {"submit_plan", "approve_plan", "get_current_plan", "add_memory", "update_memory", "delete_memory"}
+from erpsmith import registry
+
+# Every tool that is not read-only (registry.hints) is gated, except these: plans have to be made somehow,
+# and memory tools write the site's notes, which spec §7 leaves outside the gate.
+UNGATED = {"submit_plan", "approve_plan", "add_memory", "update_memory", "delete_memory"}
 STATUS = {"Pending Approval": "pending_approval", "Approved": "approved"}
 DEFAULT_TTL_MINUTES = 15
 MAX_TTL_MINUTES = 1440
@@ -30,9 +33,7 @@ def canonical(args):
 
 
 def is_mutating(tool, args):
-	if tool in UNGATED:
-		return False
-	return tool == "call_method" or tool.startswith(MUTATING_PREFIXES)
+	return tool not in UNGATED and not registry.is_read_only(tool)
 
 
 def submit_plan(summary, changes):

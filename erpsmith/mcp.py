@@ -16,6 +16,7 @@ from werkzeug.wrappers import Response
 import erpsmith
 from erpsmith import guards
 from erpsmith.oauth import PROTECTED_RESOURCE, site_url
+from erpsmith import registry
 from erpsmith.registry import IMPLS, SCHEMAS, InvalidArguments, tool  # noqa: F401  re-exported: tests patch mcp.SCHEMAS and mcp.IMPLS
 
 MCP_PATH = "/api/method/erpsmith.mcp.handle"
@@ -31,20 +32,12 @@ for _module in TOOL_MODULES:
 _missing = set(SCHEMAS) - set(IMPLS)
 if _missing:
 	raise RuntimeError(f"tools.json entries without an implementation: {sorted(_missing)}")
-
-READ_ONLY_PREFIXES = ("get_", "list_", "query_", "search_", "debug_")
-READ_ONLY_EXACT = {"full_health_check", "dump_memory", "call_method_read"}
-DESTRUCTIVE_PREFIXES = ("delete_", "remove_", "update_", "set_", "fix_", "apply_", "rename_", "reorder_", "activate_")
-DESTRUCTIVE_EXACT = {"call_method"}
+for _name in SCHEMAS:
+	registry.hints(_name)  # a tool whose name matches no annotation rule fails here, at startup
 
 
 def annotations(name):
-	if name in READ_ONLY_EXACT or name.startswith(READ_ONLY_PREFIXES):
-		hints = {"readOnlyHint": True}
-	else:
-		destructive = name in DESTRUCTIVE_EXACT or name.startswith(DESTRUCTIVE_PREFIXES)
-		hints = {"readOnlyHint": False, "destructiveHint": destructive}
-	return {"title": SCHEMAS[name]["title"], **hints}
+	return {"title": SCHEMAS[name]["title"], **registry.hints(name)}
 
 
 def list_tools():

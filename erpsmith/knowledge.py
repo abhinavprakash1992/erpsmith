@@ -15,7 +15,7 @@ import frappe
 import requests
 
 from erpsmith import memory, vector_cache, vectors
-from erpsmith.registry import InvalidArguments, tool
+from erpsmith.registry import InvalidArguments, clamp, required_text, tool
 
 DOCTYPE = "MCP Knowledge Chunk"
 OWN_MODULE = "ERPSmith"
@@ -282,10 +282,10 @@ EMPTY_NOTE = ("The knowledge index is empty. It is built in the background after
 @tool("search_erpnext_knowledge")
 def search_erpnext_knowledge(query, topK=5, kind=None):
 	frappe.has_permission(DOCTYPE, "read", throw=True)
-	query = memory.required_text("query", query)[:memory.MAX_QUERY_CHARS]
+	query = required_text("query", query)[:memory.MAX_QUERY_CHARS]
 	if kind and kind not in KINDS:
 		raise InvalidArguments('kind must be "doctype" or "manual" ("doc" also means "manual")')
-	k = memory.clamp("topK", topK, 5, 1, 20)
+	k = clamp("topK", topK, 5, 1, 20)
 	hits = vector_cache.search(DOCTYPE, vectors.embed(query), k, ("kind",), {"kind": KINDS[kind]} if kind else None)
 	chunks = {r.name: r for r in frappe.get_all(
 		DOCTYPE, filters={"name": ["in", [row.name for row, _ in hits]]}, fields=["name", "kind", "title", "source", "content"])}

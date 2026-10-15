@@ -14,7 +14,7 @@ import frappe
 from frappe.utils import get_datetime, now_datetime
 
 from erpsmith import vector_cache, vectors
-from erpsmith.registry import InvalidArguments, tool
+from erpsmith.registry import InvalidArguments, clamp, required_text, tool  # noqa: F401  clamp/required_text: memory.* callers
 
 DOCTYPE = "MCP Memory"
 TOPICS = ("sandbox-rule", "pattern", "bug-fix", "context", "handoff")
@@ -39,30 +39,9 @@ def make_id(topic, title):
 	return name
 
 
-def clamp(name, value, default, low, high):
-	"""An int from a tool argument: `default` for None, otherwise clamped to low..high (floats are truncated)."""
-	if value is None:
-		return default
-	try:
-		number = float(value)
-	except OverflowError:  # an int too big for a float, such as 10**400
-		return high if value > 0 else low
-	except (TypeError, ValueError):
-		raise InvalidArguments(f"{name} must be a number") from None
-	if isinstance(value, bool) or number != number:  # True is not a count; NaN is not a number
-		raise InvalidArguments(f"{name} must be a number")
-	return int(max(low, min(high, number)))
-
-
 def check_topic(topic):
 	if topic not in TOPICS:
 		raise InvalidArguments(f'Invalid topic "{topic}". Use one of: {", ".join(TOPICS)}')
-
-
-def required_text(name, value):
-	if not isinstance(value, str) or not value.strip():
-		raise InvalidArguments(f"{name} is required (a non-empty string)")
-	return value
 
 
 def _optional_text(name, value):

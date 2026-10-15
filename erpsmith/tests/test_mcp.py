@@ -37,18 +37,18 @@ def call(name, arguments=None):
 class TestDispatch(FrappeTestCase):
 	def setUp(self):
 		self.patches = [
-			patch.dict(mcp.SCHEMAS, {"echo_test": schema("echo_test"), "boom_test": schema("boom_test")}),
+			patch.dict(mcp.SCHEMAS, {"get_echo_test": schema("get_echo_test"), "get_boom_test": schema("get_boom_test")}),
 			patch.dict(mcp.IMPLS, {}),
 		]
 		for p in self.patches:
 			p.start()
-		mcp.tool("echo_test")(lambda text: {"echo": text})
+		mcp.tool("get_echo_test")(lambda text: {"echo": text})
 
 		def boom():
 			frappe.get_doc({"doctype": "ToDo", "description": "mcp-rollback-probe"}).insert()
 			raise frappe.ValidationError("boom")
 
-		mcp.tool("boom_test")(boom)
+		mcp.tool("get_boom_test")(boom)
 
 	def tearDown(self):
 		for p in reversed(self.patches):
@@ -68,14 +68,14 @@ class TestDispatch(FrappeTestCase):
 
 	def test_tools_list_gives_every_tool_a_title_and_a_hint(self):
 		tools = rpc("tools/list")["result"]["tools"]
-		self.assertIn("echo_test", [t["name"] for t in tools])
+		self.assertIn("get_echo_test", [t["name"] for t in tools])
 		for t in tools:
 			self.assertTrue(t["title"], t["name"])
 			self.assertTrue(t["annotations"]["title"], t["name"])
 			self.assertIn("readOnlyHint", t["annotations"], t["name"])
 
 	def test_tools_call_returns_json_text(self):
-		self.assertEqual(call("echo_test", {"text": "hi"}), (False, {"echo": "hi"}))
+		self.assertEqual(call("get_echo_test", {"text": "hi"}), (False, {"echo": "hi"}))
 
 	def test_unknown_tool_is_a_tool_error(self):
 		err, body = call("nope_tool")
@@ -83,13 +83,13 @@ class TestDispatch(FrappeTestCase):
 		self.assertIn("Unknown tool: nope_tool", body["message"])
 
 	def test_wrong_arguments_are_a_tool_error_with_a_hint(self):
-		err, body = call("echo_test", {"nope": 1})
+		err, body = call("get_echo_test", {"nope": 1})
 		self.assertTrue(err)
 		self.assertEqual(body["type"], "TypeError")
 		self.assertIn("input schema", body["suggestion"])
 
 	def test_failed_tool_rolls_back_its_writes(self):
-		err, body = call("boom_test")
+		err, body = call("get_boom_test")
 		self.assertTrue(err)
 		self.assertEqual(body["message"], "boom")
 		self.assertFalse(frappe.db.exists("ToDo", {"description": "mcp-rollback-probe"}))
@@ -106,8 +106,8 @@ class TestDispatch(FrappeTestCase):
 			frappe.db.after_commit.add(lambda: fired.append("after_commit"))
 			raise frappe.ValidationError("boom")
 
-		self.register("callbacks_test", queues_then_fails)
-		self.assertTrue(call("callbacks_test")[0])
+		self.register("get_callbacks_test", queues_then_fails)
+		self.assertTrue(call("get_callbacks_test")[0])
 		# what the request's commit would run
 		frappe.db.before_commit.run()
 		frappe.db.after_commit.run()
@@ -127,11 +127,11 @@ class TestDispatch(FrappeTestCase):
 			frappe.db.sql("release savepoint mcp_tool")
 			raise frappe.ValidationError("boom")
 
-		self.register("rollback_callbacks_test", queues_then_fails)
-		self.register("rollback_callbacks_full_test", queues_then_loses_its_savepoint)
-		self.assertTrue(call("rollback_callbacks_test")[0])
+		self.register("get_rollback_callbacks_test", queues_then_fails)
+		self.register("get_rollback_callbacks_full_test", queues_then_loses_its_savepoint)
+		self.assertTrue(call("get_rollback_callbacks_test")[0])
 		self.assertEqual(ran, ["after_rollback"])
-		self.assertTrue(call("rollback_callbacks_full_test")[0])
+		self.assertTrue(call("get_rollback_callbacks_full_test")[0])
 		self.assertEqual(ran, ["after_rollback", "after_rollback (full rollback)"])
 
 	def test_failed_tool_leaves_no_file_blob_on_disk(self):
@@ -146,8 +146,8 @@ class TestDispatch(FrappeTestCase):
 			on_disk.append(os.path.exists(path))
 			raise frappe.ValidationError("boom")
 
-		self.register("blob_test", saves_a_file_then_fails)
-		err, body = call("blob_test")
+		self.register("get_blob_test", saves_a_file_then_fails)
+		err, body = call("get_blob_test")
 		self.assertTrue(err)
 		self.assertEqual(body["message"], "boom")
 		self.assertEqual(on_disk, [True])
@@ -166,9 +166,9 @@ class TestDispatch(FrappeTestCase):
 			frappe.db.after_commit.add(lambda: fired.append("after_commit"))
 			raise frappe.ValidationError("boom")
 
-		self.register("broken_cleanup_test", fails_twice)
+		self.register("get_broken_cleanup_test", fails_twice)
 		with patch("frappe.logger") as logger:
-			err, body = call("broken_cleanup_test")
+			err, body = call("get_broken_cleanup_test")
 		self.assertTrue(err)
 		self.assertEqual(body["message"], "boom")
 		logger.return_value.warning.assert_called_once()
@@ -181,8 +181,8 @@ class TestDispatch(FrappeTestCase):
 			frappe.db.sql("release savepoint mcp_tool")
 			raise frappe.ValidationError("lost")
 
-		self.register("lost_savepoint_test", loses_savepoint)
-		err, body = call("lost_savepoint_test")
+		self.register("get_lost_savepoint_test", loses_savepoint)
+		err, body = call("get_lost_savepoint_test")
 		self.assertTrue(err)
 		self.assertEqual(body["message"], "lost")
 		self.assertFalse(frappe.db.exists("ToDo", {"description": "mcp-lost-savepoint-probe"}))
@@ -192,16 +192,16 @@ class TestDispatch(FrappeTestCase):
 			frappe.get_doc({"doctype": "ToDo", "description": "mcp-unserialisable-probe"}).insert()
 			return {(1, 2): "tuple keys are not JSON"}
 
-		self.register("junk_result_test", writes_then_returns_junk)
-		err, body = call("junk_result_test")
+		self.register("get_junk_result_test", writes_then_returns_junk)
+		err, body = call("get_junk_result_test")
 		self.assertTrue(err)
 		self.assertEqual(body["type"], "TypeError")
 		self.assertFalse(frappe.db.exists("ToDo", {"description": "mcp-unserialisable-probe"}))
 
 	def test_registering_a_tool_twice_is_an_error(self):
 		with self.assertRaises(ValueError):
-			mcp.tool("echo_test")(lambda text: text)
-		self.assertEqual(call("echo_test", {"text": "hi"}), (False, {"echo": "hi"}))
+			mcp.tool("get_echo_test")(lambda text: text)
+		self.assertEqual(call("get_echo_test", {"text": "hi"}), (False, {"echo": "hi"}))
 
 	def test_ping(self):
 		self.assertEqual(rpc("ping")["result"], {})
