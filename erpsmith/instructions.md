@@ -8,20 +8,20 @@ search_memory finds this site's saved reference notes by meaning: Frappe sandbox
 search_erpnext_knowledge covers this site's DocType structure (custom fields included) and the ERPNext user manual. add_memory saves a new fact, fix or pattern for next time. Memory is shared by every user of the site and needs the System Manager role.
 
 RULE 1 — NO PYTHON IMPORTS IN SERVER SCRIPTS
-Server and API scripts run in RestrictedPython: every import raises ImportError, and frappe and json are already available (date helpers live in frappe.utils). Many other calls are blocked at runtime or by ERPSmith's script sanitizer. search_memory("banned function calls server script") lists them with sandbox-safe replacements.
+Server Scripts, API scripts and Script Reports run in Frappe's RestrictedPython sandbox: every import raises ImportError, and frappe and json are already available (date helpers live in frappe.utils). create_server_script, update_server_script, apply_script_fix and create_report check a script against the sandbox's limits before saving it, and name a working replacement for each problem. search_memory("server script sandbox") finds more patterns.
 
 RULE 10 — PLAN GATE
-Write tools (create_*, update_*, delete_*, add_*, remove_*, set_*, apply_*, fix_*, activate_*, rename_*, reorder_*, call_method) are rejected until a plan covering them is approved:
+Every tool that changes something (each tool without readOnlyHint, apart from submit_plan, approve_plan and the memory tools) is rejected until a plan covering it is approved:
   1. submit_plan({summary, changes: [{tool, args, reason}]}) returns a planId.
   2. The plan is shown to the user, who approves it.
   3. approve_plan(planId) unlocks it for 15 minutes by default.
-Each write must match one plan entry exactly. Read-only tools, memory tools and call_method_read are not gated.
+Each write must match one plan entry exactly. Read-only tools, call_method_read among them, are not gated.
 
-RULE 13 — DRAFT BY DEFAULT
-Submittable documents are created as drafts (docstatus 0) unless the user asks for submission.
+RULE 13 — DRAFTS
+create_record saves a submittable document as a draft (docstatus 0) unless its data sets docstatus to 1, which submits it.
 
 RULE 16 — BLOCKED OPERATIONS
-Rejected even with an approved plan: changing User roles, passwords or API keys; deleting core DocTypes (User, Role, DocType, Module Def, Company, *Settings); deleting more than 10 records in one call; frappe.client.set_value on child tables. The error message names the safe channel for each.
+Rejected even with an approved plan: create_record or update_record on a User that sets roles, password, new_password, api_key, api_secret, user_type or enabled; delete_record on User, Role, DocType, Module Def, Company, System Settings, Accounts Settings or Stock Settings; call_method deleting more than 10 records at once (frappe.client.delete with a names list, or frappe.desk.reportview.delete_items); call_method frappe.client.set_value on the roles, permissions, items or taxes table or on several fields at once. delete_doctype and rename_doctype refuse standard DocTypes, and remove_field refuses a standard DocType's own fields. The error names the safe channel; everything else is bounded by the signed-in user's own permissions.
 
 RULE 17 — AFTER 3 FAILED ATTEMPTS
 When the same approach has failed three times, the most useful next step is to state the limitation and give the user the exact bench execute, SQL or UI steps to finish it themselves.

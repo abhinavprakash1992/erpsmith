@@ -2,7 +2,7 @@
   {
     "name": "submit_plan",
     "title": "Submit Plan",
-    "description": "Records the write operations you intend to make (create_*, update_*, delete_*, add_*, remove_*, set_*, apply_*, fix_*, activate_*, rename_*, reorder_*, call_method) and returns a planId. Write tools on this server are rejected until the plan is approved with approve_plan, and each write must match one plan entry's tool and args exactly. Use before any write, then present the returned plan to the user for approval.",
+    "description": "Records the write operations you intend to make (every tool that is not read-only, apart from the plan and memory tools) and returns a planId. Write tools on this server are rejected until the plan is approved with approve_plan, and each write must match one plan entry's tool and args exactly. Use before any write, then present the returned plan to the user for approval.",
     "inputSchema": {
       "type": "object",
       "required": ["summary", "changes"],
@@ -40,13 +40,13 @@
   {
     "name": "get_current_plan",
     "title": "Get Current Plan",
-    "description": "Inspect the current plan's status, approved changes, and which ones have been consumed. Useful for recovering mid-execution.",
+    "description": "Returns your latest plan: its status, the approved changes and which of them have been used. Useful for recovering mid-execution.",
     "inputSchema": {"type": "object", "properties": {}}
   },
   {
     "name": "create_record",
     "title": "Create Record",
-    "description": "Creates a record in any DocType using the signed-in user's permissions. Needs an approved plan from submit_plan.",
+    "description": "Creates a record in any DocType using the signed-in user's permissions; a submittable document stays a draft unless data sets docstatus to 1. Use for data entry; create_doctype makes a new kind of document. Needs an approved plan from submit_plan.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "data"],
@@ -59,7 +59,7 @@
   {
     "name": "update_record",
     "title": "Update Record",
-    "description": "Updates fields on an existing record in any DocType using the signed-in user's permissions. Needs an approved plan from submit_plan.",
+    "description": "Updates fields on an existing record in any DocType using the signed-in user's permissions. Use to change values on one record; get_record shows the current ones. Needs an approved plan from submit_plan.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "name", "data"],
@@ -73,7 +73,7 @@
   {
     "name": "get_record",
     "title": "Get Record",
-    "description": "Returns one record from any DocType by name, as the signed-in user, including its child tables.",
+    "description": "Returns one record from any DocType by name, as the signed-in user, including its child tables. Use to read a record before changing it or to check a value.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "name"],
@@ -99,7 +99,7 @@
   {
     "name": "delete_record",
     "title": "Delete Record",
-    "description": "Deletes one record from any DocType using the signed-in user's permissions. Needs an approved plan from submit_plan.",
+    "description": "Deletes one record from any DocType using the signed-in user's permissions. Use to remove a record; a submitted document has to be cancelled first. Needs an approved plan from submit_plan.",
     "inputSchema": {
       "type": "object",
       "required": ["doctype", "name"],
