@@ -26,7 +26,9 @@ class TestSeedRules(FrappeTestCase):
 
 	def test_directives_are_caught(self):
 		for text in ("Always use get_all", "never import", "You must call save", "Do not use f-strings",
-				"don't insert rows", "Stop after 3 attempts", "MANDATORY first step", "Make sure to commit", "ensure the flag"):
+				"don't insert rows", "Stop after 3 attempts", "MANDATORY first step", "Make sure to commit", "ensure the flag",
+				"don\u2019t use f-strings", "shouldn\u2019t insert rows", "do  not insert", "do\nnot insert", "should\nnot insert",
+				"make\nsure it saves", "stop\tafter 3", "required\nto commit"):
 			self.assertIn("directive", seed_rules.hard_violations(text), text)
 
 	def test_identifiers_are_caught(self):
@@ -42,6 +44,12 @@ class TestSeedRules(FrappeTestCase):
 			self.assertIn(rule, seed_rules.hard_violations(text), rule)
 		self.assertIn("blocklisted-term", seed_rules.hard_violations("the Acme warehouse", extra_terms=["acme"]))
 		self.assertTrue(seed_rules.IDENTIFIER_RULES >= set(cases) | {"blocklisted-term"})
+
+	def test_url_allow_list_matches_whole_domains_only(self):
+		for text in ("https://evilfrappe.io/x", "https://docs.frappe.io.evil.test/x",
+				"https://docs.frappe.io/a and https://vendor-example.test/b"):
+			self.assertIn("url", seed_rules.hard_violations(text), text)
+		self.assertEqual(seed_rules.hard_violations("https://discuss.frappe.io/t/x"), [])
 
 	def test_soft_flags(self):
 		self.assertIn("rupee-amount", seed_rules.soft_flags("fee of ₹50,000", "pattern", 20))
@@ -103,6 +111,21 @@ class TestSeedCandidatesScript(FrappeTestCase):
 		clean = next(c for c in candidates if c["source_id"] == "sandbox-rule__clean-fact__1")
 		self.assertEqual(clean["suggested"], "exclude")
 		self.assertIn("blocklisted-term", clean["flags"])
+
+	def test_the_blocklist_is_counted_and_an_explicit_missing_one_fails(self):
+		notes = json.loads(FIXTURE.read_text(encoding="utf-8"))
+		done, _, report = self.run_script(notes, blocklist="# terms\nacme\nwidgetco\n")
+		self.assertIn("Blocklist: 2 terms from", report)
+		self.assertIn("blocklist: 2 terms", done.stdout)
+		_, _, report = self.run_script(notes, blocklist="")
+		self.assertIn("Blocklist: none", report)
+		with tempfile.TemporaryDirectory() as tmp:
+			source = Path(tmp) / "notes.json"
+			source.write_text("[]", encoding="utf-8")
+			done = subprocess.run([sys.executable, str(SCRIPT), "--input", str(source), "--out", str(Path(tmp) / "out"),
+				"--blocklist", "/no/such/blocklist.txt"], capture_output=True, text=True, timeout=60)
+		self.assertNotEqual(done.returncode, 0)
+		self.assertIn("/no/such/blocklist.txt", done.stderr)
 
 	def test_bad_input_fails_with_a_message(self):
 		done, _, _ = self.run_script({"not": "a list"})

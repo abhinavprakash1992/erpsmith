@@ -12,7 +12,8 @@ URL = re.compile(r"https?://([^/\s)>\]\"'`:]+)", re.I)
 # The directory review rejects servers that make Claude pull behavioural instructions from stored text,
 # so a seed note states what Frappe does; it never tells the assistant what to do.
 DIRECTIVE = re.compile(
-	r"\b(always|never|must|do not|don't|should not|shouldn't|stop after|mandatory|make sure|ensure|required to)\b", re.I)
+	r"\b(always|never|must|do\s+not|don['\u2019]t|should\s+not|shouldn['\u2019]t|stop\s+after|mandatory|make\s+sure|ensure|required\s+to)\b",
+	re.I)
 IDENTIFIERS = {
 	"customer-name": re.compile(r"edif[y]|kuzaga[n]", re.I),
 	"email": re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"),

@@ -38,12 +38,13 @@ def candidate(note, key, blocklist):
 		"content": note["content"], "flags": flags, "suggested": suggested, "approved": False}
 
 
-def report(candidates, json_name):
+def report(candidates, json_name, blocklist_note):
 	counts = {b: sum(c["suggested"] == b for c in candidates) for b in BUCKETS}
 	lines = [
 		"# Seed memory candidates",
 		"",
 		f"{len(candidates)} notes screened: {counts['include']} include, {counts['review']} review, {counts['exclude']} exclude.",
+		f"Blocklist: {blocklist_note}",
 		"",
 		"Nothing is approved yet. A seed note must state facts about Frappe or recipes that work; it must not tell the",
 		"assistant what to do (always, never, must, stop after) and must not carry anything specific to one company.",
@@ -71,7 +72,11 @@ def main():
 		sys.exit(f"cannot read {args.input}: {e}")
 	if not isinstance(notes, list):
 		sys.exit(f"{args.input}: expected a JSON list of notes")
-	blocklist = seed_rules.private_blocklist(args.blocklist)
+	if args.blocklist and not Path(args.blocklist).is_file():
+		sys.exit(f"cannot read the blocklist {args.blocklist}: no such file")
+	blocklist_path = Path(args.blocklist) if args.blocklist else ROOT / "private" / "blocklist.txt"
+	blocklist = seed_rules.private_blocklist(blocklist_path)  # the default path may be missing; an explicit one may not
+	terms = f"{len(blocklist)} term{'s' * (len(blocklist) != 1)} from {blocklist_path}" if blocklist else "none"
 	used, candidates = set(), []
 	for note in notes:
 		base = key = slug(note["title"])
@@ -85,8 +90,8 @@ def main():
 	out = Path(args.out)
 	out.mkdir(parents=True, exist_ok=True)
 	(out / "seed-candidates.json").write_text(json.dumps(candidates, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-	(out / "seed-candidates.md").write_text(report(candidates, "seed-candidates.json"), encoding="utf-8")
-	print(f"{len(candidates)} candidates -> {out}")
+	(out / "seed-candidates.md").write_text(report(candidates, "seed-candidates.json", terms), encoding="utf-8")
+	print(f"{len(candidates)} candidates -> {out}; blocklist: {terms}")
 
 
 if __name__ == "__main__":
