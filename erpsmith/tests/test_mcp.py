@@ -1,4 +1,5 @@
 import json
+import os
 import secrets
 import threading
 from unittest.mock import patch
@@ -109,6 +110,68 @@ class TestDispatch(FrappeTestCase):
 		self.assertTrue(call("callbacks_test")[0])
 		# what the request's commit would run
 		frappe.db.before_commit.run()
+		frappe.db.after_commit.run()
+		self.assertEqual(fired, [])
+
+	def test_failed_tool_runs_its_rollback_callbacks_once(self):
+		# a savepoint rollback never runs frappe.db.after_rollback by itself: File blobs and cache entries would be left behind
+		self.addCleanup(frappe.db.after_rollback.reset)
+		ran = []
+
+		def queues_then_fails():
+			frappe.db.after_rollback.add(lambda: ran.append("after_rollback"))
+			raise frappe.ValidationError("boom")
+
+		def queues_then_loses_its_savepoint():
+			frappe.db.after_rollback.add(lambda: ran.append("after_rollback (full rollback)"))
+			frappe.db.sql("release savepoint mcp_tool")
+			raise frappe.ValidationError("boom")
+
+		self.register("rollback_callbacks_test", queues_then_fails)
+		self.register("rollback_callbacks_full_test", queues_then_loses_its_savepoint)
+		self.assertTrue(call("rollback_callbacks_test")[0])
+		self.assertEqual(ran, ["after_rollback"])
+		self.assertTrue(call("rollback_callbacks_full_test")[0])
+		self.assertEqual(ran, ["after_rollback", "after_rollback (full rollback)"])
+
+	def test_failed_tool_leaves_no_file_blob_on_disk(self):
+		self.addCleanup(frappe.db.after_rollback.reset)
+		name = f"mcp-blob-probe-{secrets.token_hex(4)}.txt"
+		path = frappe.get_site_path("private", "files", name)
+		self.addCleanup(lambda: os.path.exists(path) and os.remove(path))
+		on_disk = []
+
+		def saves_a_file_then_fails():
+			frappe.get_doc({"doctype": "File", "file_name": name, "content": "probe", "is_private": 1}).insert()
+			on_disk.append(os.path.exists(path))
+			raise frappe.ValidationError("boom")
+
+		self.register("blob_test", saves_a_file_then_fails)
+		err, body = call("blob_test")
+		self.assertTrue(err)
+		self.assertEqual(body["message"], "boom")
+		self.assertEqual(on_disk, [True])
+		self.assertFalse(frappe.db.exists("File", {"file_name": name}))
+		self.assertFalse(os.path.exists(path))
+
+	def test_a_rollback_callback_that_raises_does_not_hide_the_tool_error_or_keep_commit_callbacks(self):
+		self.addCleanup(frappe.db.after_rollback.reset)
+		fired = []
+
+		def fails_twice():
+			def cleanup_breaks():
+				raise OSError("disk gone")
+
+			frappe.db.after_rollback.add(cleanup_breaks)
+			frappe.db.after_commit.add(lambda: fired.append("after_commit"))
+			raise frappe.ValidationError("boom")
+
+		self.register("broken_cleanup_test", fails_twice)
+		with patch("frappe.logger") as logger:
+			err, body = call("broken_cleanup_test")
+		self.assertTrue(err)
+		self.assertEqual(body["message"], "boom")
+		logger.return_value.warning.assert_called_once()
 		frappe.db.after_commit.run()
 		self.assertEqual(fired, [])
 

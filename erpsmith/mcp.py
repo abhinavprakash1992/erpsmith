@@ -99,8 +99,15 @@ def _undo_tool_writes():
 		frappe.db.rollback(save_point="mcp_tool")
 	except Exception:
 		# The savepoint is gone (the tool committed, ran DDL, or the transaction was rolled back
-		# by a deadlock): undo the whole transaction instead.
+		# by a deadlock): undo the whole transaction instead. That runs the rollback callbacks itself.
 		frappe.db.rollback()
+	else:
+		# A savepoint rollback skips them. They undo what the database cannot: File blobs on disk,
+		# cached docs and metadata. The tool's own error is what the client needs, so a failing callback is logged.
+		try:
+			frappe.db.after_rollback.run()
+		except Exception:
+			frappe.logger().warning("erpsmith: an after_rollback callback failed", exc_info=True)
 	# A savepoint rollback leaves before/after_commit callbacks queued, and they would fire when the
 	# request commits (webhooks, realtime events, enqueue_after_commit jobs) for rows that no longer exist.
 	frappe.db.before_commit.reset()
