@@ -431,5 +431,151 @@
         "enable": {"type": "boolean", "default": true, "description": "Also enable the script"}
       }
     }
+  },
+  {
+    "name": "create_workflow",
+    "title": "Create Workflow",
+    "description": "Creates and activates a Workflow for a DocType from states and transitions, e.g. Draft to Pending Approval to Approved or Rejected; missing Workflow State and Workflow Action records are created too. Activating it deactivates the DocType's other workflows. It may add a workflow_state field, which commits at once. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["name", "doctype", "states", "transitions"],
+      "properties": {
+        "name": {"type": "string"},
+        "doctype": {"type": "string"},
+        "states": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["state"],
+            "properties": {
+              "state": {"type": "string"},
+              "docStatus": {"type": "string", "enum": ["0", "1", "2"], "description": "0 draft, 1 submitted, 2 cancelled (default 0)"},
+              "allowEdit": {"type": "string", "description": "Role that may edit a document in this state (default Administrator)"},
+              "style": {"type": "string", "enum": ["", "Success", "Danger", "Warning", "Primary", "Secondary"], "description": "Colour of a state created by this call"},
+              "optional": {"type": "boolean"}
+            }
+          }
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["from", "action", "to"],
+            "properties": {
+              "from": {"type": "string"},
+              "action": {"type": "string"},
+              "to": {"type": "string"},
+              "allowed": {"type": "string", "description": "Role allowed to take the action (default All)"},
+              "allowSelfApproval": {"type": "boolean"}
+            }
+          }
+        },
+        "sendEmailAlerts": {"type": "boolean"}
+      }
+    }
+  },
+  {
+    "name": "list_workflows",
+    "title": "List Workflows",
+    "description": "Lists Workflows with their DocType and whether each is active, optionally for one DocType. At most 50 come back, newest first.",
+    "inputSchema": {"type": "object", "properties": {"doctype": {"type": "string"}}}
+  },
+  {
+    "name": "set_permission",
+    "title": "Set Permission",
+    "description": "Sets a role's permission rule on a DocType (read, write, create, delete, submit and so on) the way the Role Permission Manager does, keeping every other role's rules. Unlisted permission types take defaults: read, report, export, print, email and share on, the rest off. Needs the System Manager role and an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "role"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "role": {"type": "string"},
+        "permissions": {
+          "type": "object",
+          "description": "1 to grant, 0 to withhold",
+          "properties": {
+            "read": {"type": "number"}, "write": {"type": "number"}, "create": {"type": "number"}, "delete": {"type": "number"},
+            "submit": {"type": "number"}, "cancel": {"type": "number"}, "amend": {"type": "number"}, "report": {"type": "number"},
+            "export": {"type": "number"}, "import": {"type": "number"}, "print": {"type": "number"}, "email": {"type": "number"},
+            "share": {"type": "number"}
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "create_print_format",
+    "title": "Create Print Format",
+    "description": "Creates a custom Print Format for a DocType from a Jinja HTML template (values as {{ doc.field_name }}) and optional CSS. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["name", "doctype", "htmlContent"],
+      "properties": {
+        "name": {"type": "string"},
+        "doctype": {"type": "string"},
+        "htmlContent": {"type": "string", "description": "Jinja HTML template, e.g. <h1>{{ doc.name }}</h1>"},
+        "cssContent": {"type": "string"}
+      }
+    }
+  },
+  {
+    "name": "create_report",
+    "title": "Create Report",
+    "description": "Creates a custom report: a Script Report (Python, checked against the sandbox's limits like a Server Script), a Query Report (one SQL SELECT) or a Report Builder report. Needs an approved plan from submit_plan; a Script Report also needs server scripts enabled on the bench.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["name", "doctype"],
+      "properties": {
+        "name": {"type": "string"},
+        "doctype": {"type": "string", "description": "The DocType the report is about"},
+        "reportType": {"type": "string", "enum": ["Script Report", "Query Report", "Report Builder"], "description": "Default Script Report"},
+        "script": {"type": "string", "description": "Script Report: Python that sets result (the rows) or data = [columns, rows]; filters is available"},
+        "query": {"type": "string", "description": "Query Report: a SELECT statement"},
+        "columns": {"type": "array", "items": {"type": "object"}, "description": "[{fieldname, label, fieldtype, options, width}]"},
+        "filters": {"type": "array", "items": {"type": "object"}, "description": "[{fieldname, label, fieldtype, options, mandatory, default}]"}
+      }
+    }
+  },
+  {
+    "name": "create_notification",
+    "title": "Create Notification",
+    "description": "Creates an automatic Notification (email, system notification, Slack or SMS) sent when a DocType's documents are created, saved, submitted, cancelled, change a value, or reach a date. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["name", "doctype", "subject", "message"],
+      "properties": {
+        "name": {"type": "string"},
+        "doctype": {"type": "string"},
+        "event": {"type": "string", "enum": ["New", "Save", "Submit", "Cancel", "Days Before", "Days After", "Value Change", "Method", "Custom"], "description": "Default New"},
+        "condition": {"type": "string", "description": "Python condition, e.g. doc.status == 'Approved'"},
+        "subject": {"type": "string"},
+        "message": {"type": "string", "description": "Jinja template"},
+        "recipients": {"type": "array", "items": {"type": "object"}, "description": "[{field: a document field holding an email or user, role, email: extra addresses, condition}]"},
+        "channels": {"type": "array", "items": {"type": "string"}, "description": "One channel: Email (default), System Notification, Slack or SMS"},
+        "valueChanged": {"type": "string", "description": "Value Change: the field to watch"},
+        "dateChanged": {"type": "string", "description": "Days Before / Days After: the date field"},
+        "daysInAdvance": {"type": "number", "description": "Days Before / Days After: how many days"},
+        "method": {"type": "string", "description": "Method: the document method that triggers it"}
+      }
+    }
+  },
+  {
+    "name": "create_dashboard_chart",
+    "title": "Create Dashboard Chart",
+    "description": "Creates a public Dashboard Chart over a DocType's documents: grouped by a field (groupBy), or counted over time by a date field (default creation). Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["name", "doctype"],
+      "properties": {
+        "name": {"type": "string"},
+        "doctype": {"type": "string"},
+        "chartType": {"type": "string", "enum": ["Bar", "Line", "Pie", "Percentage", "Donut"], "description": "How it is drawn (default Bar)"},
+        "fieldName": {"type": "string", "description": "Date field to count by over time (default creation)"},
+        "groupBy": {"type": "string", "description": "Field to group and count by instead of time"},
+        "filters": {"type": "array", "description": "[[fieldname, operator, value]]"},
+        "timeSpan": {"type": "string", "enum": ["Last Year", "Last Quarter", "Last Month", "Last Week"], "description": "For time-based charts (default Last Year)"},
+        "timeSeries": {"type": "boolean", "description": "Accepted for compatibility; charts without groupBy are always time series"}
+      }
+    }
   }
 ]
