@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import frappe
 
-from erpsmith import mcp, memory, vector_cache, vectors
+from erpsmith import guards, mcp, memory, vector_cache, vectors
 
 
 def call(name, args=None):
@@ -12,6 +12,17 @@ def call(name, args=None):
 	result = mcp.dispatch({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
 		"params": {"name": name, "arguments": args or {}}})["result"]
 	return result.get("isError", False), json.loads(result["content"][0]["text"])
+
+
+def approved(tool, args):
+	"""Submit and approve a one-step plan for `tool` with exactly `args`."""
+	guards.approve_plan(guards.submit_plan("test", [{"tool": tool, "args": args}])["planId"])
+
+
+def run(tool, args=None):
+	"""call() a write tool under its own approved one-step plan. Returns (is_error, parsed result)."""
+	approved(tool, args or {})
+	return call(tool, args)
 
 
 def make_user(email):

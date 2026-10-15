@@ -8,10 +8,15 @@ from erpsmith.registry import tool
 MAX_LIMIT = 200
 
 
+# `flags` in get_doc would let a caller set ignore_permissions; `owner` and `creation` would forge who made a
+# record and when, which "if owner" permission rules and audit trails rely on. Frappe sets the real values itself.
+DROPPED_KEYS = {"flags", "owner", "creation"}
+
+
 def _clean(value):
-	"""Drop every `flags` key: in get_doc it would let a caller set ignore_permissions."""
+	"""Drop every DROPPED_KEYS key, at any depth (child rows have an owner too)."""
 	if isinstance(value, dict):
-		return {k: _clean(v) for k, v in value.items() if k != "flags"}
+		return {k: _clean(v) for k, v in value.items() if k not in DROPPED_KEYS}
 	if isinstance(value, list):
 		return [_clean(v) for v in value]
 	return value

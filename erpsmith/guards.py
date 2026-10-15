@@ -51,8 +51,9 @@ def submit_plan(summary, changes):
 		"status": "pending_approval",
 		"summary": summary,
 		"changes": [{"idx": i, "tool": c.tool, "args": json.loads(c.args), "reason": c.reason} for i, c in enumerate(plan.changes)],
-		"next_step": "Show this plan to the user verbatim. Wait for explicit approval (e.g. 'yes', 'go ahead', "
-		"'approved'). Then call approve_plan with this planId. Do NOT call any mutating tool before approve_plan succeeds.",
+		"next_step": "This plan is shown to the user verbatim and waits for their explicit approval (for example "
+		"'yes', 'go ahead' or 'approved'). approve_plan with this planId then unlocks the listed writes; until it "
+		"succeeds, write tools are rejected.",
 	}
 
 

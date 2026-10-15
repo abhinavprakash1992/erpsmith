@@ -91,7 +91,7 @@ class TestSnapshots(FrappeTestCase):
 		note("ghost").insert()
 		self.assertIn("ghost", [r.title for r in vector_cache.snapshot(DOCTYPE, ("title",)).rows])
 		frappe.db.rollback(save_point="probe")
-		frappe.db.after_rollback.run()  # what mcp._undo_tool_writes does after a savepoint rollback
+		frappe.db.after_rollback.run()  # what mcp.undo_tool_writes does after a savepoint rollback
 		self.assertNotIn("ghost", [r.title for r in vector_cache.snapshot(DOCTYPE, ("title",)).rows])
 
 	def test_saving_and_deleting_a_note_move_the_version(self):

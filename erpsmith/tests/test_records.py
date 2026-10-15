@@ -1,22 +1,10 @@
-import json
-
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from erpsmith import guards, mcp
+from erpsmith.tests.helpers import approved, call, run
 
 RESTRICTED = "mcp-restricted@example.com"
 VICTIM = "mcp-victim@example.com"
-
-
-def call(name, args):
-	r = mcp.dispatch({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-		"params": {"name": name, "arguments": args}})["result"]
-	return r.get("isError", False), json.loads(r["content"][0]["text"])
-
-
-def approved(tool, args):
-	guards.approve_plan(guards.submit_plan("test", [{"tool": tool, "args": args}])["planId"])
 
 
 class TestRecords(FrappeTestCase):
@@ -207,3 +195,18 @@ class TestRecords(FrappeTestCase):
 		frappe.set_user("Administrator")
 		self.assertEqual(self.row(row), (RESTRICTED, "Event"))
 		self.assertGreater(frappe.db.get_value("Notification Settings", RESTRICTED, "modified"), before)
+
+	def test_owner_and_creation_cannot_be_forged(self):
+		err, out = run("create_record", {"doctype": "ToDo", "data": {"description": "forged", "owner": VICTIM,
+			"creation": "2001-01-01 00:00:00"}})
+		self.assertFalse(err, out)
+		row = frappe.db.get_value("ToDo", out["name"], ["owner", "creation"], as_dict=True)
+		self.assertEqual(row.owner, "Administrator")
+		self.assertNotEqual(str(row.creation)[:4], "2001")
+
+		err, out = run("update_record", {"doctype": "ToDo", "name": out["name"], "data": {"owner": VICTIM,
+			"creation": "2001-01-01 00:00:00", "description": "still mine"}})
+		self.assertFalse(err, out)
+		row = frappe.db.get_value("ToDo", out["updated"], ["owner", "creation", "description"], as_dict=True)
+		self.assertEqual((row.owner, row.description), ("Administrator", "still mine"))
+		self.assertNotEqual(str(row.creation)[:4], "2001")

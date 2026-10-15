@@ -187,6 +187,23 @@ class TestDispatch(FrappeTestCase):
 		self.assertEqual(body["message"], "lost")
 		self.assertFalse(frappe.db.exists("ToDo", {"description": "mcp-lost-savepoint-probe"}))
 
+	def test_an_error_after_a_lost_savepoint_says_some_changes_may_be_saved(self):
+		def loses_savepoint():
+			frappe.db.sql("release savepoint mcp_tool")  # what a commit or DDL statement inside the tool does
+			raise frappe.ValidationError("half done")
+
+		def keeps_savepoint():
+			raise frappe.ValidationError("nothing done")
+
+		self.register("get_partial_test", loses_savepoint)
+		self.register("get_clean_failure_test", keeps_savepoint)
+		err, body = call("get_partial_test")
+		self.assertTrue(err)
+		self.assertEqual(body["partial"], mcp.PARTIAL)
+		err, body = call("get_clean_failure_test")
+		self.assertTrue(err)
+		self.assertNotIn("partial", body)
+
 	def test_unserialisable_result_is_a_tool_error_and_rolls_back(self):
 		def writes_then_returns_junk():
 			frappe.get_doc({"doctype": "ToDo", "description": "mcp-unserialisable-probe"}).insert()

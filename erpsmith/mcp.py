@@ -54,50 +54,61 @@ def list_tools():
 
 
 def suggestion(e):
+	"""What the client can do about error `e`, in descriptive voice (spec §9: behavioural guidance lives in instructions.md)."""
 	msg = str(e)
 	if msg.startswith("BLOCKED by plan gate"):
-		return ("Call submit_plan first, show the plan to the user verbatim, wait for explicit approval, "
-			"then call approve_plan. See RULE 10.")
+		return ("Write tools run only after the user approves a plan: submit_plan, the plan shown to the user verbatim, "
+			"their explicit approval, then approve_plan. See RULE 10.")
 	if msg.startswith("DANGEROUS OP BLOCKED"):
-		return "This operation is permanently blocked. The error names the safe alternative; do not work around it. See RULE 16."
+		return "This operation is blocked even with an approved plan; the error names the safe alternative. See RULE 16."
 	if msg.startswith("Unknown tool"):
-		return "Call tools/list to see the available tools."
+		return "tools/list shows the available tools."
+	if "not whitelisted" in msg:
+		return "Only whitelisted methods can be called, and the dotted path may be wrong."
 	if isinstance(e, InvalidArguments):
-		return "An argument is missing or out of range. Check the tool's input schema in tools/list."
+		return "An argument is missing or out of range; the tool's input schema in tools/list shows what it takes."
 	if isinstance(e, frappe.PermissionError):
-		return ("The signed-in ERPNext user lacks this permission. Tools run with that user's roles; "
-			"ask an administrator to grant the role.")
+		return ("The signed-in ERPNext user lacks this permission. Tools run with that user's roles, "
+			"so an administrator has to grant the role.")
 	if isinstance(e, frappe.DoesNotExistError) and msg.startswith("No memory with id"):
 		return "No note has that id. The ids of existing notes are shown by list_memory and search_memory."
 	if isinstance(e, frappe.DoesNotExistError):
-		return "Not found. Check the DocType and name with get_doctype or query_records."
+		return "Not found. get_doctype and query_records show what exists."
 	if isinstance(e, frappe.DuplicateEntryError):
-		return "Already exists. Use update instead of create, or check with get_record first."
+		return "A record with that name already exists; get_record shows it and update_record changes it."
 	if isinstance(e, frappe.LinkValidationError):
-		return "A linked record does not exist. Verify it with query_records."
+		return "A linked record does not exist; query_records shows the records that do."
 	if isinstance(e, frappe.ValidationError):
-		return "Validation failed. Check required fields and allowed values with get_doctype."
+		return "Frappe rejected the values; get_doctype shows the required fields and allowed values."
 	if "__import__" in msg or "ImportError" in msg:
-		return "The script sandbox blocks all imports. Remove every import; frappe and json are already available, and date helpers live in frappe.utils. See RULE 1."
-	if "not whitelisted" in msg:
-		return "That method is not whitelisted, so it cannot be called. Check the dotted path."
+		return ("The script sandbox rejects every import; frappe and json are already available, "
+			"and date helpers live in frappe.utils. See RULE 1.")
 	if isinstance(e, TypeError):
-		return "Wrong arguments for this tool. Check the tool's input schema in tools/list."
-	return "Try call_method with the equivalent frappe.client.* method."
+		return "The arguments do not match this tool; its input schema in tools/list shows what it takes."
+	return "This is Frappe's own error message. get_error_logs lists recent server errors, and search_memory may hold a past fix."
 
 
-def _error_result(e):
+PARTIAL = ("Some of this tool's changes may already be saved: it changed the database schema, which commits "
+	"immediately, so they could not be rolled back. get_doctype and list_fields show the current state.")
+
+
+def _error_result(e, partial=False):
 	body = {"error": True, "message": str(e) or type(e).__name__, "type": type(e).__name__, "suggestion": suggestion(e)}
+	if partial:
+		body["partial"] = PARTIAL
 	return {"content": [{"type": "text", "text": json.dumps(body, indent=2)}], "isError": True}
 
 
-def _undo_tool_writes():
+def undo_tool_writes(save_point="mcp_tool"):
+	"""Roll back to `save_point`. Returns False when the savepoint was gone and the whole transaction was rolled
+	back instead: whatever the tool committed itself (a schema change commits at once) is then kept."""
 	try:
-		frappe.db.rollback(save_point="mcp_tool")
+		frappe.db.rollback(save_point=save_point)
 	except Exception:
 		# The savepoint is gone (the tool committed, ran DDL, or the transaction was rolled back
 		# by a deadlock): undo the whole transaction instead. That runs the rollback callbacks itself.
 		frappe.db.rollback()
+		kept = False
 	else:
 		# A savepoint rollback skips them. They undo what the database cannot: File blobs on disk,
 		# cached docs and metadata. The tool's own error is what the client needs, so a failing callback is logged.
@@ -105,10 +116,12 @@ def _undo_tool_writes():
 			frappe.db.after_rollback.run()
 		except Exception:
 			frappe.logger().warning("erpsmith: an after_rollback callback failed", exc_info=True)
+		kept = True
 	# A savepoint rollback leaves before/after_commit callbacks queued, and they would fire when the
 	# request commits (webhooks, realtime events, enqueue_after_commit jobs) for rows that no longer exist.
 	frappe.db.before_commit.reset()
 	frappe.db.after_commit.reset()
+	return kept
 
 
 def call_tool(name, args):
@@ -122,8 +135,7 @@ def call_tool(name, args):
 		result = impl(**args)
 		text = json.dumps(result, indent=2, default=str)
 	except Exception as e:
-		_undo_tool_writes()
-		return _error_result(e)
+		return _error_result(e, partial=not undo_tool_writes())
 	return {"content": [{"type": "text", "text": text}]}
 
 
