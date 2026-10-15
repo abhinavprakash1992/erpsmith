@@ -28,6 +28,18 @@ class TestMetadata(FrappeTestCase):
 		self.assertEqual(m["token_endpoint"], f"{site}/api/method/frappe.integrations.oauth2.get_token")
 		self.assertEqual(m["registration_endpoint"], f"{site}/api/method/erpsmith.oauth.register_client")
 
+	def test_a_trailing_slash_on_the_site_url_gives_no_double_slashes(self):
+		# host_name in site_config.json is free text: "https://erp.example.com/" must not give "https://erp.example.com//api/..."
+		with patch("frappe.utils.get_url", return_value="https://erp.example.com/"):
+			prm, asm = oauth.protected_resource_metadata(), oauth.authorization_server_metadata()
+		self.assertEqual(prm["resource"], "https://erp.example.com")
+		self.assertEqual(prm["authorization_servers"], ["https://erp.example.com"])
+		self.assertEqual(asm["issuer"], "https://erp.example.com")
+		urls = [v for doc in (prm, asm) for v in doc.values() if isinstance(v, str) and v.startswith("https://")]
+		self.assertGreater(len(urls), 6)
+		for url in urls:
+			self.assertNotIn("//", url.removeprefix("https://"), url)
+
 	def test_renderer_serves_json_only_when_core_does_not(self):
 		with patch.object(oauth, "CORE_OAUTH", False):
 			r = oauth.WellKnownRenderer(".well-known/oauth-authorization-server")

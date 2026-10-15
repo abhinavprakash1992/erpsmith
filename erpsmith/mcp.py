@@ -15,8 +15,10 @@ from werkzeug.wrappers import Response
 
 import erpsmith
 from erpsmith import guards
+from erpsmith.oauth import PROTECTED_RESOURCE, site_url
 from erpsmith.registry import IMPLS, SCHEMAS, tool  # noqa: F401  re-exported: tests patch mcp.SCHEMAS and mcp.IMPLS
 
+MCP_PATH = "/api/method/erpsmith.mcp.handle"
 SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 INSTRUCTIONS = (Path(__file__).parent / "instructions.md").read_text(encoding="utf-8")
 
@@ -162,11 +164,27 @@ def _json(body, status=200):
 	return Response(json.dumps(body, default=str), status=status, mimetype="application/json")
 
 
+def www_authenticate():
+	"""The 401 challenge (RFC 9728): where a client learns how to get a token."""
+	return f'Bearer resource_metadata="{site_url()}/{PROTECTED_RESOURCE}"'
+
+
+def add_www_authenticate(response):
+	"""after_request hook. Frappe rejects a bad, expired or revoked bearer token before handle() runs, so on v15
+	that 401 has no challenge and a client cannot tell it should refresh its token. v16 core adds one itself
+	(after this hook, replacing ours), so an existing header is left alone."""
+	try:
+		if (response is not None and response.status_code == 401 and frappe.request.path == MCP_PATH
+				and "WWW-Authenticate" not in response.headers):
+			response.headers["WWW-Authenticate"] = www_authenticate()
+	except Exception:
+		frappe.logger().warning("erpsmith: could not add WWW-Authenticate to a 401", exc_info=True)
+
+
 @frappe.whitelist(allow_guest=True, methods=["GET", "POST"])
 def handle():
 	if frappe.session.user == "Guest":
-		metadata = frappe.utils.get_url("/.well-known/oauth-protected-resource")
-		return Response(status=401, headers={"WWW-Authenticate": f'Bearer resource_metadata="{metadata}"'})
+		return Response(status=401, headers={"WWW-Authenticate": www_authenticate()})
 	if frappe.request.method != "POST":
 		return Response(status=405, headers={"Allow": "POST"})
 	try:

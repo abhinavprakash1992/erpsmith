@@ -1,12 +1,19 @@
 import json
+import secrets
+import threading
 from unittest.mock import patch
 
 import frappe
+import frappe.app
 from frappe.tests.utils import FrappeTestCase
-from werkzeug.test import EnvironBuilder
-from werkzeug.wrappers import Request
+from frappe.utils import add_to_date, now_datetime
+from werkzeug.test import Client, EnvironBuilder
+from werkzeug.wrappers import Request, Response
 
-from erpsmith import mcp
+from erpsmith import mcp, oauth
+
+MCP_PATH = "/api/method/erpsmith.mcp.handle"
+CHALLENGE = r'^Bearer resource_metadata="https?://[^"]+/\.well-known/oauth-protected-resource"$'
 
 
 def schema(name):
@@ -211,3 +218,146 @@ class TestHTTP(FrappeTestCase):
 		self.assertEqual(r.status_code, 200)
 		self.assertEqual(r.mimetype, "application/json")
 		self.assertEqual(json.loads(r.get_data()), {"jsonrpc": "2.0", "id": 7, "result": {}})
+
+def request_at(path):
+	frappe.local.request = Request(EnvironBuilder(method="POST", path=path).get_environ())
+
+
+class TestChallengeHook(FrappeTestCase):
+	"""after_request hook: Frappe v15 raises AuthenticationError for a bad bearer token before handle() runs."""
+
+	def setUp(self):
+		self.saved_request = getattr(frappe.local, "request", None)
+		request_at(MCP_PATH)
+
+	def tearDown(self):
+		frappe.local.request = self.saved_request
+
+	def test_it_is_registered_as_an_after_request_hook(self):
+		self.assertIn("erpsmith.mcp.add_www_authenticate", frappe.get_hooks("after_request"))
+
+	def test_a_401_on_the_mcp_path_gets_the_challenge(self):
+		r = Response(status=401)
+		mcp.add_www_authenticate(r)
+		self.assertEqual(r.headers.getlist("WWW-Authenticate"), [mcp.www_authenticate()])
+		self.assertRegex(r.headers["WWW-Authenticate"], CHALLENGE)
+
+	def test_the_value_is_the_one_handle_gives_a_guest(self):
+		frappe.local.request = Request(EnvironBuilder(method="POST", path=MCP_PATH, data="{}",
+			content_type="application/json").get_environ())
+		frappe.set_user("Guest")
+		try:
+			guest = mcp.handle()
+		finally:
+			frappe.set_user("Administrator")
+		r = Response(status=401)
+		mcp.add_www_authenticate(r)
+		self.assertEqual(r.headers["WWW-Authenticate"], guest.headers["WWW-Authenticate"])
+
+	def test_an_existing_challenge_is_left_alone(self):
+		r = Response(status=401, headers={"WWW-Authenticate": 'Bearer resource_metadata="https://core.example/x"'})
+		mcp.add_www_authenticate(r)
+		self.assertEqual(r.headers.getlist("WWW-Authenticate"), ['Bearer resource_metadata="https://core.example/x"'])
+
+	def test_other_statuses_and_other_paths_are_untouched(self):
+		for status in (200, 202, 403, 405):
+			r = Response(status=status)
+			mcp.add_www_authenticate(r)
+			self.assertNotIn("WWW-Authenticate", r.headers, status)
+		for path in ("/api/method/ping", "/api/method/erpsmith.mcp.handle/x", "/"):
+			request_at(path)
+			r = Response(status=401)
+			mcp.add_www_authenticate(r)
+			self.assertNotIn("WWW-Authenticate", r.headers, path)
+
+	def test_it_never_raises(self):
+		mcp.add_www_authenticate(None)  # Frappe passes None when the request ended in an HTTPException
+		frappe.local.request = None
+		r = Response(status=401)
+		mcp.add_www_authenticate(r)
+		self.assertNotIn("WWW-Authenticate", r.headers)
+		request_at(MCP_PATH)
+		with patch.object(mcp, "www_authenticate", side_effect=RuntimeError("boom")), patch("frappe.logger") as logger:
+			mcp.add_www_authenticate(Response(status=401))
+		logger.return_value.warning.assert_called_once()
+
+	def test_a_trailing_slash_on_the_site_url_does_not_double_the_slash(self):
+		with patch("frappe.utils.get_url", return_value="https://erp.example.com/"):
+			self.assertEqual(mcp.www_authenticate(),
+				'Bearer resource_metadata="https://erp.example.com/.well-known/oauth-protected-resource"')
+			frappe.set_user("Guest")
+			try:
+				guest = mcp.handle()
+			finally:
+				frappe.set_user("Administrator")
+			self.assertEqual(guest.headers["WWW-Authenticate"], mcp.www_authenticate())
+
+
+class TestChallengeOverWSGI(FrappeTestCase):
+	"""Requests through the real WSGI app. It inits and destroys frappe.local per request, so each runs on a thread
+	of its own; that thread has its own database connection and sees only committed rows."""
+
+	def setUp(self):
+		self.site = frappe.local.site
+		self.client_id = None
+
+	def tearDown(self):
+		frappe.db.delete("OAuth Bearer Token", {"client": self.client_id or "-"})
+		frappe.db.delete("OAuth Client", {"name": self.client_id or "-"})
+		frappe.db.commit()
+
+	def post(self, authorization=None, path=MCP_PATH, body='{"jsonrpc":"2.0","id":1,"method":"ping"}'):
+		out = {}
+
+		def run():
+			try:
+				headers = {"X-Frappe-Site-Name": self.site, "Content-Type": "application/json"}
+				if authorization:
+					headers["Authorization"] = authorization
+				out["response"] = Client(frappe.app.application).post(path, data=body, headers=headers, buffered=True)
+			except Exception as e:  # report it on the test thread
+				out["error"] = e
+
+		thread = threading.Thread(target=run)
+		with patch("frappe.errprint"):  # developer mode prints the AuthenticationError traceback to stdout
+			thread.start()
+			thread.join()
+		if "error" in out:
+			raise out["error"]
+		return out["response"]
+
+	def token(self, status="Active", expires_in_minutes=60):
+		if not self.client_id:
+			self.client_id = oauth.register({"redirect_uris": ["https://claude.ai/api/mcp/auth_callback"]})["client_id"]
+		value = secrets.token_hex(16)
+		frappe.get_doc({
+			"doctype": "OAuth Bearer Token", "client": self.client_id, "user": "Administrator", "scopes": "all",
+			"access_token": value, "refresh_token": secrets.token_hex(16), "status": status,
+			"expiration_time": add_to_date(now_datetime(), minutes=expires_in_minutes), "expires_in": 3600,
+		}).insert(ignore_permissions=True)
+		frappe.db.commit()
+		return f"Bearer {value}"
+
+	def assert_one_challenge(self, response):
+		self.assertEqual(response.status_code, 401)
+		challenges = response.headers.getlist("WWW-Authenticate")
+		self.assertEqual(len(challenges), 1, challenges)
+		self.assertRegex(challenges[0], CHALLENGE)
+
+	def test_a_request_without_a_token_gets_one_challenge(self):
+		self.assert_one_challenge(self.post())
+
+	def test_an_unknown_bearer_token_gets_one_challenge(self):
+		self.assert_one_challenge(self.post("Bearer not-a-token"))
+
+	def test_an_expired_bearer_token_gets_one_challenge(self):
+		self.assert_one_challenge(self.post(self.token(expires_in_minutes=-5)))
+
+	def test_a_revoked_bearer_token_gets_one_challenge(self):
+		self.assert_one_challenge(self.post(self.token(status="Revoked")))
+
+	def test_a_valid_bearer_token_gets_a_reply_and_no_challenge(self):
+		r = self.post(self.token())
+		self.assertEqual(r.status_code, 200)
+		self.assertEqual(json.loads(r.get_data()), {"jsonrpc": "2.0", "id": 1, "result": {}})
+		self.assertNotIn("WWW-Authenticate", r.headers)

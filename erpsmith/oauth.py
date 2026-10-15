@@ -34,8 +34,13 @@ URI_CHARS = re.compile(r"[A-Za-z0-9\-._~:/?\[\]@!$&'()*+,;=%]+")
 NAME_UNSAFE = re.compile(r"[<>&\"'`\x00-\x1f\x7f]")  # the consent page prints the name unescaped
 
 
+def site_url():
+	"""The site's public URL. Without the trailing slash a host_name of "https://x/" would give "https://x//api/..."."""
+	return frappe.utils.get_url().rstrip("/")
+
+
 def protected_resource_metadata():
-	site = frappe.utils.get_url()
+	site = site_url()
 	return {
 		"resource": site,
 		"authorization_servers": [site],
@@ -46,7 +51,7 @@ def protected_resource_metadata():
 
 
 def authorization_server_metadata():
-	site = frappe.utils.get_url()
+	site = site_url()
 
 	def method(path):
 		return f"{site}/api/method/{path}"
