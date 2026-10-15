@@ -67,12 +67,41 @@ class TestManualChunks(FrappeTestCase):
 			{"title": "Number", "route": "docs/user/manual/en/b", "content": 12345}]
 		self.assertEqual(knowledge.manual_chunks(PAGES + odd)[:len(knowledge.manual_chunks(PAGES))], knowledge.manual_chunks(PAGES))
 		titles = [c["title"] for c in knowledge.manual_chunks(odd)]
-		self.assertTrue(titles and set(titles) == {""})  # untitled chunks for the first page, nothing for the second
+		self.assertTrue(titles and set(titles) == {"a"})  # the first page takes its title from the route, the second has no chunks
+
+	def test_a_blank_title_falls_back_to_the_last_segment_of_the_route(self):
+		for title in (None, 5, "", "  \n"):
+			page = {"title": title, "route": "docs/user/manual/en/some-page/", "content": paragraphs(2)}
+			chunks = knowledge.manual_chunks([page])
+			self.assertTrue(chunks and all(c["title"] == "some-page" for c in chunks), title)
+			self.assertTrue(chunks[0]["content"].startswith("# some-page\n\n"))
+		page = {"title": None, "route": "x" * 300, "content": paragraphs(2)}
+		self.assertTrue(all(len(c["title"]) == 140 for c in knowledge.manual_chunks([page])))
+		self.assertTrue(all(c["title"] == "untitled" for c in knowledge.manual_chunks([{"title": None, "route": "", "content": paragraphs(2)}])))
+
+	def test_a_second_page_with_the_same_route_is_skipped(self):
+		first = {"title": "First", "route": "docs/user/manual/en/dup", "content": paragraphs(2)}
+		again = {"title": "Second", "route": "docs/user/manual/en/dup", "content": paragraphs(5)}
+		chunks = knowledge.manual_chunks([first, again])
+		self.assertEqual({c["title"] for c in chunks}, {"First"})
+		self.assertEqual(len({c["chunk_key"] for c in chunks}), len(chunks))
 
 	def test_intros_come_from_the_first_chunk_of_each_page(self):
 		intros = knowledge._intros(knowledge.manual_chunks(PAGES))
 		self.assertTrue(intros["Role"].startswith("A Role is a set of permissions"))
 		self.assertLessEqual(len(intros["Role"]), 500)
+
+	def test_pages_with_one_title_give_the_same_intro_whether_fetched_or_stored(self):
+		empty_knowledge_table()
+		body = "x" * 100
+		pages = [{"title": "Twin", "route": f"docs/user/manual/en/{r}", "content": f"{r} says: {body}"} for r in ("p1", "p2", "p3")]
+		for order in (pages, pages[::-1]):  # the API's order must not matter
+			chunks = knowledge.manual_chunks(order)
+			fetched = knowledge._intros(chunks)
+			knowledge.sync(chunks, ("manual",))
+			self.assertEqual(fetched, knowledge._stored_intros(), [p["route"] for p in order])
+			first = min(chunks, key=lambda c: c["chunk_key"])
+			self.assertEqual(fetched["Twin"], knowledge._intro(first["content"]))
 
 
 class TestFetchManual(FrappeTestCase):
@@ -128,6 +157,17 @@ class TestBuild(FrappeTestCase):
 			out = self.run_build(PAGES)
 		embed.assert_not_called()
 		self.assertEqual((out["added"], out["updated"], out["deleted"]), (0, 0, 0))
+
+	def test_a_page_without_a_title_or_with_a_duplicate_route_does_not_abort_the_build(self):
+		untitled = {"title": None, "route": "docs/user/manual/en/untitled-thing", "content": paragraphs(2)}
+		pages = PAGES + [untitled, {"title": "Duplicate", "route": "docs/user/manual/en/long-page", "content": paragraphs(3)}]
+		out = self.run_build(pages)
+		expected = {c["chunk_key"] for c in knowledge.manual_chunks(PAGES + [untitled])}
+		self.assertEqual({r.name for r in frappe.get_all(DOCTYPE, filters={"kind": "manual"})}, expected)
+		self.assertEqual(out["deleted"], 0)
+		titles = frappe.get_all(DOCTYPE, filters={"source": "https://docs.erpnext.com/docs/user/manual/en/untitled-thing"}, pluck="title")
+		self.assertTrue(titles and set(titles) == {"untitled-thing"})
+		self.assertEqual(frappe.db.count(DOCTYPE, {"title": "Duplicate"}), 0)  # the later page with a taken route is skipped
 
 	def test_a_manual_outage_keeps_the_old_chunks_and_summaries(self):
 		self.run_build(PAGES)

@@ -197,12 +197,14 @@ def _split_long(text):
 def manual_chunks(pages):
 	"""Chunks of the manual: a page is cut at its '## ' headings, long sections at paragraph breaks, and
 	every chunk starts with the page title so it makes sense on its own."""
-	chunks = []
+	chunks, routes = [], set()
 	for page in pages:
-		if not isinstance(page, dict) or not isinstance(page.get("route"), str):
-			continue
+		if not isinstance(page, dict) or not isinstance(page.get("route"), str) or page["route"] in routes:
+			continue  # a page seen twice under one route would repeat its chunk keys: the first one wins
+		routes.add(page["route"])
 		title, content = page.get("title"), page.get("content")
 		title = title.strip() if isinstance(title, str) else ""
+		title = title or page["route"].rstrip("/").rsplit("/", 1)[-1] or "untitled"  # the title column is mandatory
 		digest = hashlib.sha256(page["route"].encode("utf-8")).hexdigest()[:16]
 		n = 0
 		for section in re.split(r"\n(?=## )", _clean(content if isinstance(content, str) else "")):
@@ -222,9 +224,10 @@ def _intro(content):
 
 
 def _intros(chunks):
-	"""{page title: opening text of its first chunk}, used as the 'what is this for' prose in a DocType's summary."""
+	"""{page title: opening text of its first chunk}, used as the 'what is this for' prose in a DocType's summary.
+	Pages that share a title: the lowest chunk_key wins, the same rule as _stored_intros."""
 	intros = {}
-	for chunk in chunks:
+	for chunk in sorted(chunks, key=lambda c: c["chunk_key"]):
 		if chunk["chunk_key"].endswith("::0"):
 			intros.setdefault(chunk["title"], _intro(chunk["content"]))
 	return intros
@@ -232,8 +235,12 @@ def _intros(chunks):
 
 def _stored_intros():
 	"""The same, read from the manual chunks already stored, for a build that could not fetch the manual."""
-	rows = frappe.get_all(DOCTYPE, filters={"kind": "manual", "chunk_key": ["like", "%::0"]}, fields=["title", "content"])
-	return {r.title: _intro(r.content) for r in rows}
+	rows = frappe.get_all(DOCTYPE, filters={"kind": "manual", "chunk_key": ["like", "%::0"]},
+		fields=["title", "content"], order_by="chunk_key asc")
+	intros = {}
+	for r in rows:
+		intros.setdefault(r.title, _intro(r.content))
+	return intros
 
 
 def build(include_manual=True, commit=True, only_doctypes=None):
