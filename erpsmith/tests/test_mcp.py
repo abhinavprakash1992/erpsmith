@@ -86,6 +86,53 @@ class TestDispatch(FrappeTestCase):
 		self.assertEqual(body["message"], "boom")
 		self.assertFalse(frappe.db.exists("ToDo", {"description": "mcp-rollback-probe"}))
 
+	def register(self, name, fn):
+		mcp.SCHEMAS[name] = schema(name)  # SCHEMAS and IMPLS are patched per test, so this is undone in tearDown
+		mcp.tool(name)(fn)
+
+	def test_failed_tool_discards_its_commit_callbacks(self):
+		fired = []
+
+		def queues_then_fails():
+			frappe.db.before_commit.add(lambda: fired.append("before_commit"))
+			frappe.db.after_commit.add(lambda: fired.append("after_commit"))
+			raise frappe.ValidationError("boom")
+
+		self.register("callbacks_test", queues_then_fails)
+		self.assertTrue(call("callbacks_test")[0])
+		# what the request's commit would run
+		frappe.db.before_commit.run()
+		frappe.db.after_commit.run()
+		self.assertEqual(fired, [])
+
+	def test_failed_tool_is_an_error_result_even_when_its_savepoint_is_gone(self):
+		def loses_savepoint():
+			frappe.get_doc({"doctype": "ToDo", "description": "mcp-lost-savepoint-probe"}).insert()
+			frappe.db.sql("release savepoint mcp_tool")
+			raise frappe.ValidationError("lost")
+
+		self.register("lost_savepoint_test", loses_savepoint)
+		err, body = call("lost_savepoint_test")
+		self.assertTrue(err)
+		self.assertEqual(body["message"], "lost")
+		self.assertFalse(frappe.db.exists("ToDo", {"description": "mcp-lost-savepoint-probe"}))
+
+	def test_unserialisable_result_is_a_tool_error_and_rolls_back(self):
+		def writes_then_returns_junk():
+			frappe.get_doc({"doctype": "ToDo", "description": "mcp-unserialisable-probe"}).insert()
+			return {(1, 2): "tuple keys are not JSON"}
+
+		self.register("junk_result_test", writes_then_returns_junk)
+		err, body = call("junk_result_test")
+		self.assertTrue(err)
+		self.assertEqual(body["type"], "TypeError")
+		self.assertFalse(frappe.db.exists("ToDo", {"description": "mcp-unserialisable-probe"}))
+
+	def test_registering_a_tool_twice_is_an_error(self):
+		with self.assertRaises(ValueError):
+			mcp.tool("echo_test")(lambda text: text)
+		self.assertEqual(call("echo_test", {"text": "hi"}), (False, {"echo": "hi"}))
+
 	def test_ping(self):
 		self.assertEqual(rpc("ping")["result"], {})
 

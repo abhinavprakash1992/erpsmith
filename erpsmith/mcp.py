@@ -32,6 +32,8 @@ def tool(name):
 	def register(fn):
 		if name not in SCHEMAS:
 			raise KeyError(f"{name} has no schema in tools.json")
+		if name in IMPLS:
+			raise ValueError(f"{name} already has an implementation")
 		IMPLS[name] = fn
 		return fn
 
@@ -94,6 +96,19 @@ def _error_result(e):
 	return {"content": [{"type": "text", "text": json.dumps(body, indent=2)}], "isError": True}
 
 
+def _undo_tool_writes():
+	try:
+		frappe.db.rollback(save_point="mcp_tool")
+	except Exception:
+		# The savepoint is gone (the tool committed, ran DDL, or the transaction was rolled back
+		# by a deadlock): undo the whole transaction instead.
+		frappe.db.rollback()
+	# A savepoint rollback leaves before/after_commit callbacks queued, and they would fire when the
+	# request commits (webhooks, realtime events, enqueue_after_commit jobs) for rows that no longer exist.
+	frappe.db.before_commit.reset()
+	frappe.db.after_commit.reset()
+
+
 def call_tool(name, args):
 	impl = IMPLS.get(name)
 	if impl is None:
@@ -101,10 +116,11 @@ def call_tool(name, args):
 	frappe.db.savepoint("mcp_tool")
 	try:
 		result = impl(**args)
+		text = json.dumps(result, indent=2, default=str)
 	except Exception as e:
-		frappe.db.rollback(save_point="mcp_tool")
+		_undo_tool_writes()
 		return _error_result(e)
-	return {"content": [{"type": "text", "text": json.dumps(result, indent=2, default=str)}]}
+	return {"content": [{"type": "text", "text": text}]}
 
 
 def _rpc_error(mid, code, message):
