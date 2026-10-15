@@ -258,5 +258,92 @@
     "title": "Rename DocType",
     "description": "Renames a custom DocType (custom=1) and its database table, updating links to it; standard DocTypes are refused. It changes the database schema, which commits at once. Needs an approved plan from submit_plan.",
     "inputSchema": {"type": "object", "required": ["oldName", "newName"], "properties": {"oldName": {"type": "string"}, "newName": {"type": "string"}}}
+  },
+  {
+    "name": "add_field",
+    "title": "Add Field",
+    "description": "Adds a field to a DocType. On a standard DocType it creates a Custom Field, the upgrade-safe layer Customize Form uses; on a custom DocType it adds the field to the DocType itself. It changes the database schema, which commits at once. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "label", "fieldtype"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "label": {"type": "string"},
+        "fieldname": {"type": "string", "description": "Derived from the label when omitted"},
+        "fieldtype": {"type": "string", "description": "Frappe fieldtype, e.g. Data, Int, Link, Select, Check, Date"},
+        "options": {"type": "string", "description": "Link: the linked DocType. Select: one option per line. Table: the child DocType."},
+        "required": {"type": "boolean"},
+        "bold": {"type": "boolean"},
+        "inListView": {"type": "boolean"},
+        "inFilter": {"type": "boolean", "description": "Show as a standard filter in the list view"},
+        "readOnly": {"type": "boolean"},
+        "hidden": {"type": "boolean"},
+        "default": {"type": "string"},
+        "description": {"type": "string"},
+        "dependsOn": {"type": "string", "description": "Display condition, e.g. eval:doc.status=='Active'"},
+        "insertAfter": {"type": "string", "description": "Fieldname to place the new field after (default: the last field)"},
+        "mandatoryDependsOn": {"type": "string"}
+      }
+    }
+  },
+  {
+    "name": "update_field",
+    "title": "Update Field",
+    "description": "Changes properties of an existing field (label, reqd, hidden, default, options, depends_on and so on). A Custom Field is edited directly, a field of a custom DocType is edited in the DocType, and a standard field gets Property Setters. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "fieldname", "updates"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "fieldname": {"type": "string"},
+        "updates": {
+          "type": "object",
+          "description": "DocField property names and their new values",
+          "properties": {
+            "label": {"type": "string"}, "reqd": {"type": "number"}, "hidden": {"type": "number"},
+            "read_only": {"type": "number"}, "default": {"type": "string"}, "options": {"type": "string"},
+            "description": {"type": "string"}, "depends_on": {"type": "string"}, "in_list_view": {"type": "number"},
+            "bold": {"type": "number"}
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "remove_field",
+    "title": "Remove Field",
+    "description": "Removes a Custom Field, or a field of a custom DocType. A standard DocType's own fields are refused; hiding one with set_property is the upgrade-safe alternative. Needs an approved plan from submit_plan.",
+    "inputSchema": {"type": "object", "required": ["doctype", "fieldname"], "properties": {"doctype": {"type": "string"}, "fieldname": {"type": "string"}}}
+  },
+  {
+    "name": "list_fields",
+    "title": "List Fields",
+    "description": "Lists every field of a DocType in form order, custom fields included, with type, options, required, hidden and default. Use to find fieldnames before writing code or changing fields.",
+    "inputSchema": {"type": "object", "required": ["doctype"], "properties": {"doctype": {"type": "string"}}}
+  },
+  {
+    "name": "reorder_fields",
+    "title": "Reorder Fields",
+    "description": "Changes the form order of a DocType's fields with a field_order Property Setter, as Customize Form does. The listed fields come first in the given order and the rest keep their order after them. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "fieldOrder"],
+      "properties": {"doctype": {"type": "string"}, "fieldOrder": {"type": "array", "items": {"type": "string"}, "description": "Fieldnames in the wanted order"}}
+    }
+  },
+  {
+    "name": "set_property",
+    "title": "Set Property",
+    "description": "Overrides one property of a DocType or of one of its fields with a Property Setter, without editing the DocType. Use for hidden, reqd, default, read_only, options or in_list_view on standard DocTypes. Needs an approved plan from submit_plan.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["doctype", "property", "value"],
+      "properties": {
+        "doctype": {"type": "string"},
+        "fieldname": {"type": "string", "description": "Omit for a DocType-level property"},
+        "property": {"type": "string", "description": "A DocField property (for a field) or DocType property, e.g. reqd, hidden, default"},
+        "value": {"description": "New value"}
+      }
+    }
   }
 ]

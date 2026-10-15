@@ -5,6 +5,7 @@ app: on a site in developer mode, deleting or renaming one also deletes or moves
 tools refuse it. Standard DocTypes change through Custom Fields and Property Setters instead.
 """
 
+import json
 import re
 
 import frappe
@@ -159,3 +160,138 @@ def rename_doctype(oldName, newName):
 	refuse_standard(oldName, "renamed")
 	new = frappe.rename_doc("DocType", oldName, required_text("newName", newName))
 	return {"renamed": True, "from": oldName, "to": new}
+
+
+def _field(doctype, fieldname):
+	df = frappe.get_meta(required_text("doctype", doctype)).get_field(required_text("fieldname", fieldname))
+	if not df:
+		raise InvalidArguments(f"{doctype} has no field {fieldname}; list_fields shows its fields")
+	return df
+
+
+def _custom_field(doctype, fieldname):
+	return frappe.db.get_value("Custom Field", {"dt": doctype, "fieldname": fieldname})
+
+
+def _property_type(level, prop):
+	"""A Property Setter records the type of the property it overrides: that property's fieldtype on DocField or DocType."""
+	df = frappe.get_meta(level).get_field(prop)
+	if not df:
+		raise InvalidArguments(f"{prop} is not a {'field' if level == 'DocField' else 'DocType'} property")
+	return df.fieldtype
+
+
+def property_setter(doctype, fieldname, prop, value):
+	"""Override one property of a DocType (fieldname None) or of one of its fields. Frappe deletes the setter it replaces."""
+	level = "DocField" if fieldname else "DocType"
+	frappe.get_doc({
+		"doctype": "Property Setter", "doctype_or_field": level, "doc_type": doctype, "field_name": fieldname,
+		"property": prop, "property_type": _property_type(level, prop),
+		"value": str(int(value)) if isinstance(value, bool) else "" if value is None else str(value),
+	}).insert()
+
+
+def change_field(doctype, fieldname, updates):
+	"""Set field properties where they belong: the Custom Field, the custom DocType itself, or Property Setters
+	on a standard field. Returns which of the three it used."""
+	if not isinstance(updates, dict) or not updates:
+		raise InvalidArguments("updates must be a non-empty object of field properties")
+	df = _field(doctype, fieldname)
+	if "fieldname" in updates:
+		raise InvalidArguments("a fieldname cannot be changed; add_field a new field and remove_field the old one")
+	properties = frappe.get_meta("DocField")
+	unknown = sorted(k for k in updates if not properties.get_field(k))
+	if unknown:
+		raise InvalidArguments(f"not field properties: {', '.join(unknown)}")
+	custom_field = _custom_field(doctype, df.fieldname)
+	if custom_field:
+		doc = frappe.get_doc("Custom Field", custom_field)
+		doc.update(updates)
+		doc.save()
+		return "Custom Field"
+	if is_custom(doctype):
+		doc = frappe.get_doc("DocType", doctype)
+		next(row for row in doc.fields if row.fieldname == df.fieldname).update(updates)
+		doc.save()
+		return "DocType"
+	for prop, value in updates.items():
+		property_setter(doctype, df.fieldname, prop, value)
+	return "Property Setter"
+
+
+@tool("add_field")
+def add_field(doctype, label, fieldtype, fieldname=None, options=None, required=False, bold=False, inListView=False,
+		inFilter=False, readOnly=False, hidden=False, default=None, description=None, dependsOn=None, insertAfter=None,
+		mandatoryDependsOn=None):
+	row = docfield({"label": label, "fieldtype": fieldtype, "fieldname": fieldname, "options": options, "required": required,
+		"bold": bold, "inListView": inListView, "inFilter": inFilter, "readOnly": readOnly, "hidden": hidden,
+		"default": default, "description": description, "dependsOn": dependsOn, "mandatoryDependsOn": mandatoryDependsOn})
+	meta = frappe.get_meta(required_text("doctype", doctype))
+	if insertAfter and not meta.get_field(insertAfter):
+		raise InvalidArguments(f"{doctype} has no field {insertAfter} to insert after")
+	if is_custom(doctype):
+		doc = frappe.get_doc("DocType", doctype)
+		new = doc.append("fields", row)
+		if insertAfter:
+			doc.fields.remove(new)
+			doc.fields.insert(next(i for i, r in enumerate(doc.fields) if r.fieldname == insertAfter) + 1, new)
+			for i, r in enumerate(doc.fields, 1):
+				r.idx = i
+		doc.save()
+		return {"doctype": doctype, "fieldname": row["fieldname"], "method": "DocType"}
+	# A Custom Field is the upgrade-safe way to extend a standard DocType. Without insert_after it would go first.
+	custom = frappe.get_doc({"doctype": "Custom Field", "dt": doctype, **row,
+		"insert_after": insertAfter or (meta.fields[-1].fieldname if meta.fields else None)}).insert()
+	return {"doctype": doctype, "fieldname": custom.fieldname, "method": "Custom Field"}
+
+
+@tool("update_field")
+def update_field(doctype, fieldname, updates):
+	method = change_field(doctype, fieldname, updates)
+	return {"updated": True, "doctype": doctype, "fieldname": fieldname, "method": method, "properties": sorted(updates)}
+
+
+@tool("remove_field")
+def remove_field(doctype, fieldname):
+	df = _field(doctype, fieldname)
+	custom_field = _custom_field(doctype, df.fieldname)
+	if custom_field:
+		frappe.delete_doc("Custom Field", custom_field)
+		method = "Custom Field"
+	elif is_custom(doctype):
+		doc = frappe.get_doc("DocType", doctype)
+		doc.fields = [row for row in doc.fields if row.fieldname != df.fieldname]
+		doc.save()
+		method = "DocType"
+	else:
+		raise StandardDocType(f"{doctype} is a standard DocType and {df.fieldname} is one of its own fields, so it cannot "
+			"be removed here; set_property with property hidden and value 1 hides it.")
+	return {"removed": df.fieldname, "doctype": doctype, "method": method}
+
+
+@tool("list_fields")
+def list_fields(doctype):
+	fields = frappe.get_meta(required_text("doctype", doctype)).fields
+	return {"doctype": doctype, "count": len(fields), "fields": [field_summary(df) for df in fields]}
+
+
+@tool("reorder_fields")
+def reorder_fields(doctype, fieldOrder):
+	if not isinstance(fieldOrder, list) or not all(isinstance(f, str) for f in fieldOrder):
+		raise InvalidArguments("fieldOrder must be a list of fieldnames")
+	current = [df.fieldname for df in frappe.get_meta(required_text("doctype", doctype)).fields]
+	wanted = [f for f in dict.fromkeys(fieldOrder) if f in current]
+	# Frappe ignores a field_order that does not name every field, so the fields not listed keep their order after these.
+	order = wanted + [f for f in current if f not in wanted]
+	frappe.get_doc({"doctype": "Property Setter", "doctype_or_field": "DocType", "doc_type": doctype,
+		"property": "field_order", "property_type": "Data", "value": json.dumps(order)}).insert()
+	return {"doctype": doctype, "reordered": len(wanted), "ignored": [f for f in fieldOrder if f not in current], "order": order}
+
+
+@tool("set_property")
+def set_property(doctype, property, value, fieldname=None):
+	frappe.get_meta(required_text("doctype", doctype))
+	if fieldname:
+		_field(doctype, fieldname)
+	property_setter(doctype, fieldname or None, required_text("property", property), value)
+	return {"set": True, "doctype": doctype, "fieldname": fieldname, "property": property, "value": value}
