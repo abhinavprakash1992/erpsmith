@@ -59,14 +59,35 @@ class TestImportJson(FrappeTestCase):
 			{"id": "x__bad-date__1", "topic": "pattern", "title": "t", "content": "c", "created_at": "yesterday"},
 			{"topic": "pattern", "title": "t", "content": "c"},  # no id
 			"not an object",
+			{**good, "id": "x__ok__2"},  # the import carries on after the failures
 		]
 		with tempfile.TemporaryDirectory() as tmp:
 			out = memory.import_json(write(tmp, data))
-		self.assertEqual((out["imported"], out["already_present"]), (1, 0))
+		self.assertEqual((out["imported"], out["already_present"]), (2, 0))
 		self.assertEqual([r["id"] for r in out["rejected"]],
 			["x__no-title__1", "x__bad-topic__1", "x__big__1", "x__bad-date__1", None, None])
 		self.assertTrue(all(r["reason"] for r in out["rejected"]))
-		self.assertEqual(frappe.db.count("MCP Memory"), 1)  # a rejected note leaves no row behind
+		self.assertEqual(frappe.db.count("MCP Memory"), 2)  # a rejected note leaves no row behind
+
+	def test_a_note_that_fails_after_its_insert_is_rolled_back_and_the_rest_still_import(self):
+		def note(id):  # noqa: A002
+			return {"id": id, "topic": "pattern", "title": id, "content": "c", "created_at": "2026-01-01T00:00:00Z"}
+
+		real = frappe.db.set_value
+
+		def fail_on_boom(doctype, name, *args, **kwargs):  # the call that sets `creation`, after the row is inserted
+			if name == "x__boom__1":
+				raise RuntimeError("disk full")
+			return real(doctype, name, *args, **kwargs)
+
+		with tempfile.TemporaryDirectory() as tmp, patch.object(frappe.db, "set_value", fail_on_boom):
+			out = memory.import_json(write(tmp, [note("x__first__1"), note("x__boom__1"), note("x__last__1")]))
+		self.assertEqual((out["imported"], out["already_present"]), (2, 0))
+		self.assertEqual([r["id"] for r in out["rejected"]], ["x__boom__1"])
+		self.assertIn("disk full", out["rejected"][0]["reason"])
+		self.assertFalse(frappe.db.exists("MCP Memory", "x__boom__1"))  # its insert was rolled back
+		self.assertTrue(frappe.db.exists("MCP Memory", "x__first__1"))
+		self.assertTrue(frappe.db.exists("MCP Memory", "x__last__1"))  # imported after the failure
 
 	def test_files_that_are_not_an_export_raise(self):
 		with tempfile.TemporaryDirectory() as tmp:

@@ -4,7 +4,8 @@
 #   dev/test.sh erpsmith.tests.test_mcp    # one module
 set -euo pipefail
 cd "$(dirname "$0")"
-if [ -n "$(git ls-files ../private)" ]; then
+tracked=$(git ls-files ../private)  # on its own line: a git error here aborts (set -e) instead of passing the guard
+if [ -n "$tracked" ]; then
   echo "private/ holds customer data and must never be tracked: git rm -r --cached private"; exit 1
 fi
 if grep -rnIiE "edif[y]|kuzaga[n]" --exclude-dir=.git --exclude-dir=.superpowers --exclude-dir=private ..; then
