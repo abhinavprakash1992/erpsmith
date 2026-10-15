@@ -1,0 +1,27 @@
+{
+ "actions": [],
+ "creation": "2026-10-15 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["topic", "title", "content", "seed_key", "vector"],
+ "fields": [
+  {"fieldname": "topic", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Topic", "options": "sandbox-rule\npattern\nbug-fix\ncontext\nhandoff", "reqd": 1},
+  {"fieldname": "title", "fieldtype": "Data", "in_list_view": 1, "label": "Title", "reqd": 1},
+  {"fieldname": "content", "fieldtype": "Long Text", "label": "Content", "reqd": 1},
+  {"fieldname": "seed_key", "fieldtype": "Data", "hidden": 1, "label": "Seed Key", "no_copy": 1, "read_only": 1, "search_index": 1},
+  {"fieldname": "vector", "fieldtype": "Long Text", "hidden": 1, "label": "Vector", "no_copy": 1, "read_only": 1}
+ ],
+ "links": [],
+ "modified": "2026-10-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "ERPSmith",
+ "name": "MCP Memory",
+ "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "report": 1, "role": "System Manager", "write": 1}],
+ "search_fields": "title,topic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}
