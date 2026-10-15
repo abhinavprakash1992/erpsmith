@@ -1,0 +1,10 @@
+[
+ {"id": "sandbox-rule__clean-fact__1", "topic": "sandbox-rule", "title": "Imports raise ImportError", "content": "Server scripts run in RestrictedPython, where any import raises ImportError. frappe, json and datetime are available as globals.", "created_at": "2026-01-01T00:00:00.000Z"},
+ {"id": "pattern__directive-wording__1", "topic": "pattern", "title": "Child rows", "content": "Always call doc.append before save. Never insert child rows directly.", "created_at": "2026-01-02T00:00:00.000Z"},
+ {"id": "bug-fix__has-email__1", "topic": "bug-fix", "title": "Webhook failure", "content": "Reported by ops@example.com after the nightly run.", "created_at": "2026-01-03T00:00:00.000Z"},
+ {"id": "bug-fix__foreign-url__1", "topic": "bug-fix", "title": "Vendor API", "content": "The call to https://vendor-example.test/v2/orders returned 500.", "created_at": "2026-01-04T00:00:00.000Z"},
+ {"id": "context__site-fact__1", "topic": "context", "title": "Warehouse names", "content": "Stores are named by city.", "created_at": "2026-01-05T00:00:00.000Z"},
+ {"id": "bug-fix__dated__1", "topic": "bug-fix", "title": "2026-05-13 — rows silently dropped", "content": "Child rows are dropped when the parent is saved without them.", "created_at": "2026-01-06T00:00:00.000Z"},
+ {"id": "pattern__docs-link__1", "topic": "pattern", "title": "Calling a whitelisted method", "content": "See https://docs.frappe.io/framework/user/en/api/server-calls for the call syntax.", "created_at": "2026-01-07T00:00:00.000Z"},
+ {"id": "pattern__title-twice__1", "topic": "pattern", "title": "Imports raise ImportError", "content": "A second note whose title makes the same key.", "created_at": "2026-01-08T00:00:00.000Z"}
+]
