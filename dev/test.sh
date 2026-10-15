@@ -12,7 +12,21 @@ if grep -rnIiE "edif[y]|kuzaga[n]" --exclude-dir=.git --exclude-dir=.superpowers
   echo "Customer-specific text found above: remove it before committing."; exit 1
 fi
 ARGS="--app erpsmith"; [ -n "${1:-}" ] && ARGS="--module $1"
+# `bench run-tests` exits 0 on v15 even when tests fail, so judge each bench by what it printed. Run both, then report.
+out=$(mktemp); trap 'rm -f "$out"' EXIT
+failed=0; summary=""
 for v in 15 16; do
   echo "=== Frappe v$v"
-  docker compose exec -T "bench$v" bash -lc "cd ~/frappe-bench && bench --site test$v.localhost run-tests $ARGS"
+  docker compose exec -T "bench$v" bash -lc "cd ~/frappe-bench && bench --site test$v.localhost run-tests $ARGS" 2>&1 | tee "$out" || true
+  ran=$(grep -E '^Ran [0-9]+ tests?' "$out" | tail -1 || true)
+  if [ -n "$ran" ] && awk '/^Ran [0-9]+ tests?/{r=1; next} r && /^OK/{ok=1} END{exit !ok}' "$out" \
+      && ! grep -qE '^(Traceback|ERROR:)|FAILED \(' "$out"; then
+    summary="$summary
+v$v: OK ($ran)"
+  else
+    summary="$summary
+v$v: FAILED"; failed=1
+  fi
 done
+echo "$summary"
+exit $failed
