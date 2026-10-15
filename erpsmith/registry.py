@@ -11,6 +11,10 @@ SCHEMAS = {t["name"]: t for t in json.loads((Path(__file__).parent / "tools.json
 IMPLS = {}
 
 
+class InvalidArguments(ValueError):
+	"""A tool argument is missing or out of range. mcp.suggestion() answers it with a pointer to the tool's input schema."""
+
+
 def tool(name):
 	"""Register the implementation of tool `name`; its schema lives in tools.json."""
 

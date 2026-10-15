@@ -30,7 +30,7 @@ class TestRegistry(FrappeTestCase):
 
 	def test_every_import_order_gives_the_full_tool_set(self):
 		# importing a tool module first used to run mcp's startup check in the middle of that module's own import
-		for first in ("erpsmith.tools.records", "erpsmith.tools.plan", "erpsmith.mcp", "erpsmith.registry"):
+		for first in ("erpsmith.tools.records", "erpsmith.tools.plan", "erpsmith.memory", "erpsmith.mcp", "erpsmith.registry"):
 			with self.subTest(first=first):
 				out = self.assert_imports(
 					f"import json, {first}\nfrom erpsmith import mcp\nprint(json.dumps(sorted(mcp.IMPLS)))")
@@ -39,7 +39,7 @@ class TestRegistry(FrappeTestCase):
 	def test_the_registry_imports_no_tool_module_and_not_mcp(self):
 		out = self.assert_imports(
 			"import sys, erpsmith.registry\n"
-			"print(sorted(m for m in sys.modules if m in ('erpsmith.mcp', 'erpsmith.tools.plan', 'erpsmith.tools.records')))\n")
+			"print(sorted(m for m in sys.modules if m in ('erpsmith.mcp', 'erpsmith.memory', 'erpsmith.tools.plan', 'erpsmith.tools.records')))\n")
 		self.assertEqual(out, "[]")
 
 	def test_mcp_re_exports_the_registry_objects(self):

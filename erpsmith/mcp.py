@@ -16,14 +16,14 @@ from werkzeug.wrappers import Response
 import erpsmith
 from erpsmith import guards
 from erpsmith.oauth import PROTECTED_RESOURCE, site_url
-from erpsmith.registry import IMPLS, SCHEMAS, tool  # noqa: F401  re-exported: tests patch mcp.SCHEMAS and mcp.IMPLS
+from erpsmith.registry import IMPLS, SCHEMAS, InvalidArguments, tool  # noqa: F401  re-exported: tests patch mcp.SCHEMAS and mcp.IMPLS
 
 MCP_PATH = "/api/method/erpsmith.mcp.handle"
 SUPPORTED_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26")
 INSTRUCTIONS = (Path(__file__).parent / "instructions.md").read_text(encoding="utf-8")
 
 # Every module that registers tools. Importing one registers its tools; a new tool module goes in this list.
-TOOL_MODULES = ("erpsmith.tools.plan", "erpsmith.tools.records")
+TOOL_MODULES = ("erpsmith.tools.plan", "erpsmith.tools.records", "erpsmith.memory")
 for _module in TOOL_MODULES:
 	importlib.import_module(_module)
 
@@ -69,6 +69,8 @@ def suggestion(e):
 		return "This operation is permanently blocked. The error names the safe alternative; do not work around it. See RULE 16."
 	if msg.startswith("Unknown tool"):
 		return "Call tools/list to see the available tools."
+	if isinstance(e, InvalidArguments):
+		return "An argument is missing or out of range. Check the tool's input schema in tools/list."
 	if isinstance(e, frappe.PermissionError):
 		return ("The signed-in ERPNext user lacks this permission. Tools run with that user's roles; "
 			"ask an administrator to grant the role.")

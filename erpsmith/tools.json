@@ -105,5 +105,75 @@
       "required": ["doctype", "name"],
       "properties": {"doctype": {"type": "string"}, "name": {"type": "string"}}
     }
+  },
+  {
+    "name": "search_memory",
+    "title": "Search Memory",
+    "description": "Semantic search over this site's saved reference notes: Frappe sandbox facts, working code patterns, past bug fixes, site context and handoff notes. Returns the best matches with id, topic, title, content and a similarity score. Use it to look up what the site has already learned before writing a script, debugging an error or creating a document. Notes are shared by all users of the site, and reading them requires the System Manager role.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "query": {"type": "string", "description": "Natural-language description of what to look up: the task or the symptom, not a file name."},
+        "topK": {"type": "number", "description": "How many results to return (default 5, max 20)."},
+        "topic": {"type": "string", "enum": ["sandbox-rule", "pattern", "bug-fix", "context", "handoff"], "description": "Optional filter to one category. Omit to search everything."}
+      }
+    }
+  },
+  {
+    "name": "add_memory",
+    "title": "Add Memory",
+    "description": "Saves a note (topic, title, content) so that search_memory can find it later. Use it for a newly found sandbox restriction, a fix, a working code recipe or a fact about the site. The note is stored once for the whole site. It is ERPSmith's own note-keeping, not a change to an ERPNext record, so it needs no plan approval. Requires the System Manager role.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["topic", "title", "content"],
+      "properties": {
+        "topic": {"type": "string", "enum": ["sandbox-rule", "pattern", "bug-fix", "context", "handoff"], "description": "Category for the note."},
+        "title": {"type": "string", "description": "Short, specific, searchable heading (up to 140 characters)."},
+        "content": {"type": "string", "description": "Markdown body (up to 20,000 characters). Concise and specific."}
+      }
+    }
+  },
+  {
+    "name": "update_memory",
+    "title": "Update Memory",
+    "description": "Edits an existing note by id (from search_memory or list_memory) and re-embeds it so search keeps finding it. Pass a new title, new content, or both. Requires the System Manager role.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "The note id from search_memory or list_memory."},
+        "content": {"type": "string", "description": "New body (optional if only the title changes)."},
+        "title": {"type": "string", "description": "New title (optional)."}
+      }
+    }
+  },
+  {
+    "name": "delete_memory",
+    "title": "Delete Memory",
+    "description": "Deletes a note by id (from search_memory or list_memory). Use it for notes that are stale or wrong. Requires the System Manager role.",
+    "inputSchema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {"id": {"type": "string", "description": "The note id to delete."}}
+    }
+  },
+  {
+    "name": "list_memory",
+    "title": "List Memory",
+    "description": "Lists saved notes (id, topic, title, created date), newest first, without semantic search. Use it to audit what is stored or to find an id to update or delete. Requires the System Manager role.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "topic": {"type": "string", "enum": ["sandbox-rule", "pattern", "bug-fix", "context", "handoff"], "description": "Optional topic filter."},
+        "limit": {"type": "number", "description": "Max entries (default 20, max 100)."}
+      }
+    }
+  },
+  {
+    "name": "dump_memory",
+    "title": "Dump Memory",
+    "description": "Returns every saved note as one markdown document grouped by topic, for backup, review or committing to git. The text comes back in the response; nothing is written on the server. Requires the System Manager role.",
+    "inputSchema": {"type": "object", "properties": {}}
   }
 ]
