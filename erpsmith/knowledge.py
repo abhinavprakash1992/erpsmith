@@ -16,6 +16,7 @@ import requests
 
 from erpsmith import customization, memory, vector_cache, vectors
 from erpsmith.registry import InvalidArguments, clamp, required_text, tool
+from erpsmith.tools.methods import READ_ONLY_FLAG
 
 DOCTYPE = "MCP Knowledge Chunk"
 OWN_MODULE = "ERPSmith"
@@ -267,14 +268,28 @@ def build(include_manual=True, commit=True, only_doctypes=None):
 	return counts
 
 
-def enqueue_build():
+def enqueue_build(include_manual=True):
 	"""Queue the build as one long job (once: a second request while it waits or runs is dropped). A failure to
 	queue it, for example Redis being down during an install, is logged and must not fail the install."""
 	try:
 		frappe.enqueue("erpsmith.knowledge.build", queue="long", timeout=3600, job_id="erpsmith-knowledge-build",
-			deduplicate=True, enqueue_after_commit=True)
+			deduplicate=True, enqueue_after_commit=True, include_manual=include_manual)
 	except Exception:
 		frappe.log_error(title="ERPSmith: could not queue the knowledge build")
+
+
+REFRESH_DOCTYPES = ("Workflow", "Server Script", "Client Script", "Notification", "Print Format", "Custom Field",
+	"Property Setter", "DocType", "Company", "Warehouse", "Currency")
+
+
+def on_source_change(doc, method=None):
+	"""doc_events hook (hooks.py lists REFRESH_DOCTYPES): queue a build without the manual when a source record changes.
+	Not during call_method_read (it refuses queued jobs), install, migrate or a test run (the rest of the suite saves
+	scripts and commits schema changes). The job id deduplicates, so a bulk import queues one build."""
+	# ponytail: a change committed while a build is already running waits for the next trigger. Add a "dirty" flag re-checked at the end of build() if that shows up in practice.
+	if frappe.local.flags.get(READ_ONLY_FLAG) or frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_test:
+		return
+	enqueue_build(include_manual=False)
 
 
 MAX_RESULT_CHARS = 6000  # a big DocType (Sales Invoice) is about 15,000 characters; keep results cheap
