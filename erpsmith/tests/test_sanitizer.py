@@ -10,6 +10,7 @@ from erpsmith import sanitizer
 FAILS = [
 	("x = hasattr(frappe, 'db')", None),
 	("x = getattr(frappe, 'db')", None),
+	("x = type('a') == str", None),
 	("x = frappe.get_roles()", None),
 	("frappe.set_user('Administrator')", None),
 	("frappe.logger().info('x')", None),

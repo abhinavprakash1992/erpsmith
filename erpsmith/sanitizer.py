@@ -15,6 +15,7 @@ INJECTED = {"DocType Event": {"doc"}, "Permission Query": {"user", "conditions"}
 MISSING_BUILTINS = {
 	"hasattr": "read the attribute directly (a missing one reads as None) or use dict.get",
 	"getattr": "read the attribute directly (a missing one reads as None) or use dict.get",
+	"type": "use isinstance(x, str) (or the type you expect) to test a value",
 }
 MISSING_ATTRIBUTES = {
 	"frappe.get_roles": 'frappe.db.exists("Has Role", {"parent": frappe.session.user, "role": "<role>"})',
