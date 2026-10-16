@@ -10,7 +10,7 @@ Everything in the repository is ready; these steps need your accounts or your de
 - [ ] Create the public GitHub repository and push `plan-4-release` (merge to `main` first).
 - [ ] Watch the first CI run (`.github/workflows/ci.yml`) on both Frappe versions and fix what the real runner shows: Python 3.14 setup, Node 22/24, `bench init` and `get-app` from the checkout.
 - [ ] Run the end-to-end Claude connector test on the release candidate over a tunnel (the Plan 1 Task 7 steps): add the connector, complete OAuth, call tools, on a v15 site and a v16 site.
-- [ ] On a Frappe Cloud site: check that nginx serves `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` (spec risk 3).
+- [x] On a Frappe Cloud site: check that nginx serves `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` (spec risk 3). Passed 2026-10-16: both return JSON on a `*.m.frappe.cloud` v16 site, with dynamic client registration and PKCE S256 advertised.
 - [ ] Tag the release: `git tag v1.0.0` (the tag is local until you push it).
 
 ## Assets to make
