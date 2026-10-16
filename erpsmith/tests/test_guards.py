@@ -260,6 +260,56 @@ class TestDangerousOps(FrappeTestCase):
 		guards.check_dangerous_op("call_method", cm("frappe.client.set_value", doctype="User", name="x", fieldname="first_name", value="A"))
 		guards.check_dangerous_op("call_method", cm("frappe.client.save", doc={"doctype": "User", "first_name": "A"}))
 
+	def test_has_role_rows_of_a_user_are_blocked(self):
+		user_row = frappe.db.get_value("Has Role", {"parenttype": "User", "parent": "Administrator"}, "name")
+		other_row = frappe.db.get_value("Has Role", {"parenttype": ("!=", "User")}, "name")
+		blocked = [
+			("create_record", {"doctype": "Has Role", "data": {"parenttype": "User", "parent": "x", "role": "System Manager"}}),
+			("update_record", {"doctype": "Has Role", "name": user_row, "data": {"role": "System Manager"}}),
+			("update_record", {"doctype": "Has Role", "name": other_row, "data": {"parenttype": "User"}}),  # retargeting a row
+			("update_record", {"doctype": "Has Role", "name": "no-such-row", "data": {"role": "x"}}),  # lookup fails
+			("delete_record", {"doctype": "Has Role", "name": user_row}),
+			("delete_record", {"doctype": "Has Role", "name": "no-such-row"}),
+		]
+		doc = {"doctype": "Has Role", "parenttype": "User", "parent": "x", "role": "System Manager"}
+		cm = lambda method, **args: ("call_method", {"method": method, "args": args})
+		blocked += [
+			cm("frappe.client.insert", doc=doc),
+			cm("frappe.client.save", doc=json.dumps({**doc, "name": user_row})),
+			cm("frappe.desk.form.save.savedocs", doc=json.dumps(doc), action="Save"),
+			cm("frappe.client.insert_many", docs=json.dumps([{"doctype": "ToDo"}, doc])),
+			cm("frappe.client.bulk_update", docs=json.dumps([{"doctype": "Has Role", "docname": user_row, "role": "x"}])),
+			cm("frappe.client.set_value", doctype="Has Role", name=user_row, fieldname="role", value="x"),
+			cm("frappe.client.delete", doctype="Has Role", name=user_row),
+			cm("frappe.desk.reportview.delete_items", doctype="Has Role", items=json.dumps([user_row])),
+		]
+		for tool, args in blocked:
+			with self.assertRaisesRegex(DangerousOp, "DANGEROUS OP BLOCKED", msg=(tool, args)):
+				guards.check_dangerous_op(tool, args)
+		if other_row:  # a Report's or Page's role row is not User.roles
+			guards.check_dangerous_op("update_record", {"doctype": "Has Role", "name": other_row, "data": {"role": "x"}})
+			guards.check_dangerous_op("delete_record", {"doctype": "Has Role", "name": other_row})
+			guards.check_dangerous_op(*cm("frappe.client.delete", doctype="Has Role", name=other_row))
+		guards.check_dangerous_op("create_record", {"doctype": "Has Role", "data": {"parenttype": "Report", "parent": "x", "role": "x"}})
+
+	def test_user_security_fields_are_blocked_through_the_other_save_methods(self):
+		user = {"doctype": "User", "email": "x@example.com", "api_key": "k"}
+		cm = lambda method, **args: {"method": method, "args": args}
+		blocked = [
+			cm("frappe.core.doctype.user.user.generate_keys", user="x@example.com"),
+			cm("frappe.desk.form.save.savedocs", doc=json.dumps(user), action="Save"),
+			cm("frappe.client.insert_many", docs=json.dumps([user])),
+			cm("frappe.client.insert_many", docs=[{"doctype": "User", "roles": []}]),
+			cm("frappe.client.bulk_update", docs=json.dumps([{"doctype": "User", "docname": "x", "enabled": 0}])),
+		]
+		for args in blocked:
+			with self.assertRaises(DangerousOp, msg=args):
+				guards.check_dangerous_op("call_method", args)
+		guards.check_dangerous_op("call_method", cm("frappe.desk.form.save.savedocs", doc=json.dumps({"doctype": "User", "first_name": "A"}), action="Save"))
+		guards.check_dangerous_op("call_method", cm("frappe.client.insert_many", docs=json.dumps([{"doctype": "ToDo"}])))
+		guards.check_dangerous_op("call_method", cm("frappe.client.bulk_update", docs=json.dumps([{"doctype": "ToDo", "docname": "x"}])))
+		guards.check_dangerous_op("call_method", cm("frappe.client.insert_many", docs="not json"))
+
 	def test_list_view_delete_of_a_protected_doctype_is_blocked(self):
 		args = {"method": "frappe.desk.reportview.delete_items", "args": {"doctype": "User", "items": json.dumps(["x"])}}
 		with self.assertRaisesRegex(DangerousOp, "User"):

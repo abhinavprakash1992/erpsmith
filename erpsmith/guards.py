@@ -213,6 +213,25 @@ def _check_user_fields(fields):
 		)
 
 
+def _check_has_role(parenttype=None, name=None):
+	"""Has Role rows are the roles of a User (and of a Report, Page and so on). A row of a User, or one whose parent cannot be
+	told (no such row, nothing given), is User.roles written row by row, which RULE 16 blocks like the table itself.
+	`parenttype` is what the call says; the stored row's parent counts too, so a call cannot retarget a User's row."""
+	stored = frappe.db.get_value("Has Role", name, "parenttype") if isinstance(name, str) and name else None
+	if "User" in (parenttype, stored) or (parenttype is None and stored is None):
+		_check_user_fields(("roles",))
+
+
+def _check_doc(doc, name=None):
+	"""A document a client method saves: a User touching a security field, or a Has Role row of a User."""
+	if not isinstance(doc, dict):
+		return
+	if doc.get("doctype") == "User":
+		_check_user_fields(doc)
+	elif doc.get("doctype") == "Has Role":
+		_check_has_role(doc.get("parenttype"), name or doc.get("name") or doc.get("docname"))
+
+
 def _check_protected_delete(doctype):
 	if isinstance(doctype, str) and doctype in PROTECTED_DOCTYPES:
 		raise DangerousOp(
@@ -226,8 +245,12 @@ def check_dangerous_op(tool, args):
 	data = args.get("data")
 	if tool in ("create_record", "update_record") and args.get("doctype") == "User" and isinstance(data, dict):
 		_check_user_fields(data)
+	if tool in ("create_record", "update_record") and args.get("doctype") == "Has Role":
+		_check_has_role(data.get("parenttype") if isinstance(data, dict) else None, args.get("name") if tool == "update_record" else None)
 	if tool == "delete_record":
 		_check_protected_delete(args.get("doctype"))
+		if args.get("doctype") == "Has Role":
+			_check_has_role(None, args.get("name"))
 	if tool != "call_method":
 		return
 	method, margs = args.get("method"), args.get("args")
@@ -244,16 +267,26 @@ def check_dangerous_op(tool, args):
 		)
 	if method in ("frappe.client.delete", "frappe.desk.reportview.delete_items"):
 		_check_protected_delete(margs.get("doctype"))
-	if method in ("frappe.client.save", "frappe.client.insert"):
-		doc = _json_value(margs.get("doc"))  # the client methods take the document as a JSON string too
-		if isinstance(doc, dict) and doc.get("doctype") == "User":
-			_check_user_fields(doc)
+		if margs.get("doctype") == "Has Role":
+			for item in bulk if isinstance(bulk, list) else [margs.get("name")]:
+				_check_has_role(None, item)
+	if method == "frappe.core.doctype.user.user.generate_keys":  # replaces a user's API secret
+		_check_user_fields(("api_key", "api_secret"))
+	# the client methods take documents as JSON strings too
+	if method in ("frappe.client.save", "frappe.client.insert", "frappe.desk.form.save.savedocs"):
+		_check_doc(_json_value(margs.get("doc")))
+	elif method in ("frappe.client.insert_many", "frappe.client.bulk_update"):
+		docs = _json_value(margs.get("docs"))
+		for doc in docs if isinstance(docs, list) else ():
+			_check_doc(doc)
 	if method == "frappe.client.set_value":
 		fieldname = margs.get("fieldname")
 		if isinstance(fieldname, str) and not margs.get("value"):
 			fieldname = _json_value(fieldname, fieldname)  # set_value reads a JSON object string as several fields
 		if margs.get("doctype") == "User":
 			_check_user_fields(fieldname if isinstance(fieldname, (dict, list, str)) else ())
+		if margs.get("doctype") == "Has Role":
+			_check_has_role(None, margs.get("name"))
 		if isinstance(fieldname, (dict, list)) or (isinstance(fieldname, str) and fieldname in CHILD_TABLE_FIELDS):
 			raise DangerousOp(
 				f"DANGEROUS OP BLOCKED — frappe.client.set_value with fieldname='{fieldname}' replaces the entire child table.\n"
