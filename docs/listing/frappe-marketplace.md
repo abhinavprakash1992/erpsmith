@@ -30,6 +30,9 @@ Not affiliated with or endorsed by Frappe Technologies.
 
 ## Links
 
+- Website: https://erpsmith.vercel.app
+- Documentation: https://erpsmith.vercel.app/docs
 - Source and issues: https://github.com/abhinavprakash1992/erpsmith
-- Privacy policy: PRIVACY.md in the repository
+- Privacy policy: https://erpsmith.vercel.app/privacy
+- Terms of use: https://erpsmith.vercel.app/terms
 - Licence: MIT

@@ -4,6 +4,8 @@
 
 **AI dev copilot for ERPNext.** Build and debug DocTypes, scripts and workflows from Claude over the Model Context Protocol, behind a plan gate, with semantic memory. Frappe v15 and v16. Free and open source (MIT).
 
+Website and docs: [erpsmith.vercel.app](https://erpsmith.vercel.app) · [Privacy](https://erpsmith.vercel.app/privacy) · [Terms](https://erpsmith.vercel.app/terms)
+
 Not affiliated with or endorsed by Frappe Technologies. ERPNext and Frappe are trademarks of Frappe Technologies Pvt. Ltd.
 
 ## What it is, and who it is for
@@ -64,7 +66,7 @@ Saved answers are ordinary memory notes; edit them in Desk or with `update_memor
 
 ## Privacy Policy
 
-Everything ERPSmith stores lives in your site's own database. It has no telemetry and no hosted service. Tool results go to the model provider behind the MCP client you use, as with any tool; the only other network call is the public ERPNext manual fetch from docs.erpnext.com. Plans keep their arguments in plaintext as an audit trail and are pruned once they are more than 7 days old and can no longer unlock anything (a daily job, so the scheduler has to be running). DocType metadata is readable by any signed-in user through `get_doctype` and the debug tools, as it is through Frappe's own desk. Read [PRIVACY.md](PRIVACY.md) for the full policy.
+Everything ERPSmith stores lives in your site's own database. It has no telemetry and no hosted service. Tool results go to the model provider behind the MCP client you use, as with any tool; the only other network call is the public ERPNext manual fetch from docs.erpnext.com. Plans keep their arguments in plaintext as an audit trail and are pruned once they are more than 7 days old and can no longer unlock anything (a daily job, so the scheduler has to be running). DocType metadata is readable by any signed-in user through `get_doctype` and the debug tools, as it is through Frappe's own desk. Read [PRIVACY.md](PRIVACY.md) for the full policy, and [TERMS.md](TERMS.md) for the terms of use.
 
 ## Development
 

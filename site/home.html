@@ -1,0 +1,49 @@
+<section class="hero">
+  <img src="/logo-512.png" alt="ERPSmith logo: a hammer striking an anvil in a shower of sparks" width="168" height="168">
+  <h1>ERPSmith</h1>
+  <p class="tagline">The AI dev copilot for ERPNext.</p>
+  <p class="lede">Build, debug and fix DocTypes, scripts and workflows from Claude over the Model Context Protocol. Every change waits behind a plan you approve, and it remembers how your site works. Frappe v15 and v16. Free and open source (MIT).</p>
+  <div class="actions">
+    <a class="button primary" href="/docs">Read the docs</a>
+    <a class="button" href="https://github.com/abhinavprakash1992/erpsmith">View on GitHub</a>
+  </div>
+</section>
+
+<section>
+  <h2>Up and running in three steps</h2>
+  <ol class="steps">
+    <li>
+      <h3>Install the app</h3>
+      <pre><code>bench get-app https://github.com/abhinavprakash1992/erpsmith
+bench --site your-site install-app erpsmith
+bench --site your-site migrate</code></pre>
+      <p>On Frappe Cloud, install it from the Marketplace.</p>
+    </li>
+    <li>
+      <h3>Connect Claude</h3>
+      <p>Add a custom connector with your site's MCP address:</p>
+      <pre><code>https://&lt;your-site&gt;/api/method/erpsmith.mcp.handle</code></pre>
+      <p>No keys, no secrets: you sign in on your own site with OAuth.</p>
+    </li>
+    <li>
+      <h3>Ask</h3>
+      <ul class="prompts">
+        <li>"Why does my Sales Invoice server script fail on submit?"</li>
+        <li>"Add a Region select field to Customer and show it in the list."</li>
+        <li>"Why can't Accounts User open Payment Entry?"</li>
+      </ul>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <h2>What you get</h2>
+  <div class="grid">
+    <div class="card"><h3>59 developer tools</h3><p>DocTypes and fields, client and server scripts, workflows, permissions, print formats, reports, notifications and dashboard charts, plus debug and fix tools for each.</p></div>
+    <div class="card"><h3>A plan gate</h3><p>Every change is rejected until you have read and approved a plan that names it exactly. Approved changes are single-use and expire.</p></div>
+    <div class="card"><h3>Runs as your user</h3><p>Every tool runs with the signed-in user's roles and permissions. Give the assistant its own user and it can do exactly what those roles allow.</p></div>
+    <div class="card"><h3>Memory that learns</h3><p>Ships with 96 notes on Frappe sandbox rules, patterns and known fixes. You and the assistant add your company's own context.</p></div>
+    <div class="card"><h3>Knows your site</h3><p>Searches an index of your DocTypes (custom fields included), workflows, scripts and print formats, plus the ERPNext manual.</p></div>
+    <div class="card"><h3>Private by design</h3><p>Everything stays in your site's database. No telemetry, no hosted service. <a href="/privacy">Privacy policy</a>.</p></div>
+  </div>
+</section>

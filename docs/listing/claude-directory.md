@@ -2,6 +2,15 @@
 
 Listing type: **custom connection**. Users enter their own site's MCP address at connect time (`https://<their-site>/api/method/erpsmith.mcp.handle`); there is no shared endpoint, so the server URL differs for every site.
 
+## Links
+
+- Website: https://erpsmith.vercel.app
+- Documentation: https://erpsmith.vercel.app/docs
+- Source and issues: https://github.com/abhinavprakash1992/erpsmith
+- Privacy policy: https://erpsmith.vercel.app/privacy
+- Terms of use: https://erpsmith.vercel.app/terms
+- Licence: MIT
+
 ## Name
 
 ERPSmith

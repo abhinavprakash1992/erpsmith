@@ -24,7 +24,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/abhinavprakash1992/erpsmith"
+Homepage = "https://erpsmith.vercel.app"
+Documentation = "https://erpsmith.vercel.app/docs"
+Source = "https://github.com/abhinavprakash1992/erpsmith"
 Issues = "https://github.com/abhinavprakash1992/erpsmith/issues"
 Changelog = "https://github.com/abhinavprakash1992/erpsmith/blob/main/CHANGELOG.md"
 

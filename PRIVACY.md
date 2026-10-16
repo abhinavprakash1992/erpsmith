@@ -39,6 +39,10 @@ There is no other network access, and no advertising, analytics or data sale.
 - Memory notes, the knowledge index and the site profile stay until you delete them, rebuild the index or uninstall the app. Edits to the generated site-profile notes are overwritten on the next knowledge build, and a deleted profile note comes back, because the notes mirror your site's configuration.
 - Uninstalling the app from a site removes its DocTypes and the data in them.
 
+## This website
+
+The ERPSmith website is a set of static pages. It sets no cookies and runs no analytics or tracking scripts. Its host, Vercel, keeps standard request logs (such as IP address, time and page requested) to serve and protect the site, under Vercel's own privacy policy.
+
 ## Contact
 
 Abhinav Prakash, abhinav.prakash1992@gmail.com. Questions, data requests and security reports go to that address, or to the issues page at https://github.com/abhinavprakash1992/erpsmith.

@@ -26,7 +26,7 @@ Everything in the repository is ready; these steps need your accounts or your de
 ## Claude Directory
 
 - [ ] Build the reviewer demo site (private bench, `server_script_enabled`, synthetic data) and the reviewer test account described in `docs/listing/claude-directory.md`.
-- [ ] Submit at `claude.ai/directory/manage` as a custom connection with the text from `docs/listing/claude-directory.md`; the privacy policy link is PRIVACY.md on GitHub.
+- [ ] Submit at `claude.ai/directory/manage` as a custom connection with the text from `docs/listing/claude-directory.md`; the privacy policy link is https://erpsmith.vercel.app/privacy (terms: https://erpsmith.vercel.app/terms, docs: https://erpsmith.vercel.app/docs).
 
 ## Launch
 
