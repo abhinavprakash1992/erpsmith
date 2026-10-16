@@ -15,7 +15,7 @@ Everything in the repository is ready; these steps need your accounts or your de
 
 ## Assets to make
 
-- [ ] Logo (at least 200x200, no text).
+- [x] Logo (at least 200x200, no text): `docs/assets/logo.svg` (vector) and `docs/assets/logo-512.png` for upload forms.
 - [ ] The 90-second demo video (`docs/launch/demo-script.md`).
 
 ## Frappe Cloud Marketplace

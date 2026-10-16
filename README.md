@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.svg" alt="ERPSmith logo: an anvil with sparks" width="128" height="128"></p>
+
 # ERPSmith
 
 **AI dev copilot for ERPNext.** Build and debug DocTypes, scripts and workflows from Claude over the Model Context Protocol, behind a plan gate, with semantic memory. Frappe v15 and v16. Free and open source (MIT).
