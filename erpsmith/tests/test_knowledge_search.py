@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
-from erpsmith import guards, knowledge, mcp, vectors
+from erpsmith import guards, knowledge, mcp, vector_cache, vectors
 from erpsmith.tests.helpers import call, empty_knowledge_table, knowledge_chunk, make_user
 
 CHUNKS = [
@@ -116,3 +116,55 @@ class TestRealDoctypeRanking(FrappeTestCase):
 		knowledge.sync(knowledge.doctype_chunks(only=names), ("doctype",))
 		_, out = call("search_erpnext_knowledge", {"query": "python script that runs on document save", "kind": "doctype", "topK": 3})
 		self.assertEqual(out["results"][0]["title"], "Server Script", [r["title"] for r in out["results"]])
+
+
+EXACT = [
+	knowledge_chunk("doctype::Client Script", title="Client Script", summary=(
+		"Client Script: server script, script, server script, script; a script for the server script form.")),
+	knowledge_chunk("doctype::Server Script", title="Server Script", summary=(
+		"Server Script: Python code that runs on a document event or on a schedule.")),
+	knowledge_chunk("doctype::Website Script", title="Website Script", summary="Website Script: JavaScript added to every page of the website."),
+	knowledge_chunk("manual::ss::0", title="Server Scripts", summary="# Server Scripts\n\nA server script runs Python code on the server.",
+		content="# Server Scripts\n\nA server script runs Python code on the server."),
+]
+
+
+class TestExactDoctypeName(FrappeTestCase):
+	def setUp(self):
+		empty_knowledge_table()
+		knowledge.sync(EXACT, ("doctype", "manual"))
+
+	def titles(self, **args):
+		err, out = call("search_erpnext_knowledge", {"query": "server script", **args})
+		self.assertFalse(err, out)
+		return [r["title"] for r in out["results"]], out
+
+	def test_an_exact_doctype_name_ranks_its_chunk_first(self):
+		semantic = [row.name for row, _ in vector_cache.search(knowledge.DOCTYPE, vectors.embed("server script"), 3, ("kind",),
+			{"kind": "doctype"})]
+		self.assertEqual(semantic[0], "doctype::Client Script")  # without the exact-name step the wrong one wins
+		titles, out = self.titles(topK=3)
+		self.assertEqual(titles[0], "Server Script")
+		self.assertEqual(out["results"][0]["score"], 1.0)
+		self.assertEqual(out["count"], 3)
+		for query in ("  SERVER SCRIPT ", "Server script"):
+			_, other = call("search_erpnext_knowledge", {"query": query, "topK": 3})
+			self.assertEqual(other["results"][0]["title"], "Server Script", query)
+
+	def test_the_exact_match_is_not_listed_twice(self):
+		for k in (1, 2, 4):
+			titles, out = self.titles(topK=k)
+			self.assertEqual(titles.count("Server Script"), 1, titles)
+			self.assertEqual(len(titles), len(set(titles)))
+			self.assertEqual(out["count"], k)
+		self.assertEqual(self.titles(kind="doctype", topK=3)[0][0], "Server Script")
+
+	def test_kind_manual_ignores_the_exact_match(self):
+		for kind in ("manual", "doc", "customization"):
+			_, out = self.titles(kind=kind)
+			self.assertNotIn("doctype", {r["kind"] for r in out["results"]}, kind)
+			self.assertNotIn(1.0, [r["score"] for r in out["results"]], kind)
+
+	def test_a_query_that_is_no_doctype_name_is_unchanged(self):
+		_, out = call("search_erpnext_knowledge", {"query": "python code that runs on the server", "topK": 2})
+		self.assertLess(out["results"][0]["score"], 1.0)

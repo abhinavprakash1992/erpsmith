@@ -291,6 +291,11 @@ def search_erpnext_knowledge(query, topK=5, kind=None):
 		raise InvalidArguments('kind must be "doctype", "manual" ("doc" also means "manual") or "customization"')
 	k = clamp("topK", topK, 5, 1, 20)
 	hits = vector_cache.search(DOCTYPE, vectors.embed(query), k, ("kind",), {"kind": KINDS[kind]} if kind else None)
+	# A query that is exactly a DocType name ("Server Script") puts that DocType's chunk first. Meaning alone ranks
+	# similar DocTypes above it. The database compares titles without regard to case.
+	exact = frappe.db.get_value(DOCTYPE, {"kind": "doctype", "title": query.strip()}, "name") if kind in (None, "doctype") else None
+	if exact:
+		hits = [(frappe._dict(name=exact), 1.0)] + [h for h in hits if h[0].name != exact][:k - 1]
 	chunks = {r.name: r for r in frappe.get_all(
 		DOCTYPE, filters={"name": ["in", [row.name for row, _ in hits]]}, fields=["name", "kind", "title", "source", "content"])}
 	results = []
