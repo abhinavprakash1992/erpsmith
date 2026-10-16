@@ -88,7 +88,9 @@ footer a {{ color: var(--muted); }}
 def markdown(text):
 	for old, new in LINKS.items():
 		text = text.replace(old, new)
-	return subprocess.run(["npx", "-y", "marked@12.0.2", "--gfm"], input=text, capture_output=True, text=True, check=True).stdout
+	# website build, not app code: a fixed argument list, and the markdown goes in on stdin
+	return subprocess.run(["npx", "-y", "marked@12.0.2", "--gfm"], input=text,  # nosemgrep
+		capture_output=True, text=True, check=True).stdout
 
 
 def slug(text):

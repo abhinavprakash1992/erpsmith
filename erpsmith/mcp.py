@@ -222,7 +222,9 @@ def add_www_authenticate(response):
 		frappe.logger().warning("erpsmith: could not add WWW-Authenticate to a 401", exc_info=True)
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET", "POST"])
+# Guest on purpose: an unauthenticated MCP client must get the 401 with WWW-Authenticate that starts OAuth (first line
+# of the body); no tool runs for Guest.
+@frappe.whitelist(allow_guest=True, methods=["GET", "POST"])  # nosemgrep
 def handle():
 	if frappe.session.user == "Guest":
 		return Response(status=401, headers={"WWW-Authenticate": www_authenticate()})

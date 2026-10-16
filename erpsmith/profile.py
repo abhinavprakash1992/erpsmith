@@ -125,7 +125,7 @@ def _warehouses():
 
 
 def _tables_with_rows():
-	"""DocTypes whose table holds at least one row. Exact (one EXISTS per table, which reads a single index entry), because
+	"""DocTypes whose table holds at least one row. Exact (one `select 1 ... limit 1` per table, which reads a single index entry), because
 	InnoDB's information_schema row estimates drift between builds and would rewrite and re-embed the notes every time."""
 	# ERPSmith's own DocTypes are left out: the profile notes live in MCP Memory, so counting it would make writing
 	# the notes change the apps note on a site whose ERPSmith tables start empty
@@ -133,7 +133,7 @@ def _tables_with_rows():
 	held = set()
 	for name in names:
 		try:
-			if frappe.db.sql(f"select exists(select 1 from `tab{name}` limit 1)")[0][0]:
+			if frappe.qb.from_(name).select(1).limit(1).run():
 				held.add(name)
 		except Exception:  # a DocType whose table was never created (or was dropped) holds no rows
 			continue

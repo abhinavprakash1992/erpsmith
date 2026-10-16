@@ -96,12 +96,12 @@ def _server_script_chunks():
 			else f"API method {s.api_method}" if s.api_method
 			else f"schedule {s.cron_format or s.event_frequency}" if s.script_type == "Scheduler Event" else "")
 		named, fields = _unique(NAMED_DOCTYPES.findall(code)), _unique(ASSIGNED.findall(code))
-		content = "\n".join(filter(None, [f"Server Script: {s.name}{' [disabled]' if s.disabled else ''}", f"Type: {s.script_type}",
+		content = "\n".join(part for part in [f"Server Script: {s.name}{' [disabled]' if s.disabled else ''}", f"Type: {s.script_type}",
 			target and f"Target: {target}", s.api_method and f"Guest access: {'yes' if s.allow_guest else 'no'}",
-			s.module and f"Module: {s.module}", "Code:", code]))
-		summary = " ".join(filter(None, [f"Server Script {s.name} ({s.script_type})" + (f" on {target}" if target else "")
+			s.module and f"Module: {s.module}", "Code:", code] if part)
+		summary = " ".join(part for part in [f"Server Script {s.name} ({s.script_type})" + (f" on {target}" if target else "")
 			+ (", disabled" if s.disabled else "") + ".", named and f"Names DocTypes: {', '.join(named)}.",
-			fields and f"Assigns fields: {', '.join(fields)}."]))
+			fields and f"Assigns fields: {', '.join(fields)}."] if part)
 		yield _chunk("Server Script", s.name, summary, content)
 
 
@@ -109,8 +109,8 @@ def _client_script_chunks():
 	for c in _rows("Client Script", CLIENT_SCRIPT):
 		code = scrub(c.script)
 		handlers = _unique(h for h in HANDLERS.findall(code) if h not in NOT_HANDLERS)
-		content = "\n".join(filter(None, [f"Client Script: {c.name}{'' if c.enabled else ' [disabled]'}",
-			f"DocType: {c.dt} | View: {c.view}", c.module and f"Module: {c.module}", "Code:", code]))
+		content = "\n".join(part for part in [f"Client Script: {c.name}{'' if c.enabled else ' [disabled]'}",
+			f"DocType: {c.dt} | View: {c.view}", c.module and f"Module: {c.module}", "Code:", code] if part)
 		summary = (f"Client Script {c.name} on {c.dt} ({c.view} view{'' if c.enabled else ', disabled'})."
 			+ (f" Handlers: {', '.join(handlers)}." if handlers else ""))
 		yield _chunk("Client Script", c.name, summary, content)
@@ -124,10 +124,10 @@ def _notification_chunks():
 		used = _unique(DOC_FIELDS.findall(n.message or ""))
 		when = n.event + (f" of {n.value_changed}" if n.value_changed else "") \
 			+ (f" ({n.days_in_advance} days, date {n.date_changed})" if n.date_changed else "")
-		content = "\n".join(filter(None, [f"Notification: {n.name}{'' if n.enabled else ' [disabled]'}",
+		content = "\n".join(part for part in [f"Notification: {n.name}{'' if n.enabled else ' [disabled]'}",
 			f"DocType: {n.document_type} | Event: {when} | Channel: {n.channel}", n.condition and f"Condition: {scrub(n.condition)}",
 			f"Recipients by role: {_list(roles)}", f"Recipients by document field: {_list(by_field)}",
-			n.subject and f"Subject: {scrub(n.subject)}", f"Message uses fields: {_list(used)}"]))
+			n.subject and f"Subject: {scrub(n.subject)}", f"Message uses fields: {_list(used)}"] if part)
 		summary = (f"Notification {n.name} on {n.document_type} fires on {when} through {n.channel}"
 			+ ("" if n.enabled else " (disabled)") + f"; goes to roles {_list(roles)} and document fields {_list(by_field)}; "
 			f"its message uses {_list(used)}.")
@@ -174,17 +174,17 @@ def _attach_server_scripts(parts):
 	for s in _rows("Server Script", SERVER_SCRIPT[:4] + ["disabled"]):
 		if s.reference_doctype:
 			parts[s.reference_doctype]["Server Scripts"].append(
-				f"{s.name} ({', '.join(filter(None, [s.doctype_event or s.script_type, s.disabled and 'disabled']))})")
+				f"{s.name} ({', '.join(part for part in [s.doctype_event or s.script_type, s.disabled and 'disabled'] if part)})")
 
 
 def _attach_client_scripts(parts):
 	for c in _rows("Client Script", ["name", "dt", "view", "enabled"]):
-		parts[c.dt]["Client Scripts"].append(f"{c.name} ({', '.join(filter(None, [c.view, not c.enabled and 'disabled']))})")
+		parts[c.dt]["Client Scripts"].append(f"{c.name} ({', '.join(part for part in [c.view, not c.enabled and 'disabled'] if part)})")
 
 
 def _attach_notifications(parts):
 	for n in _notifications():
-		parts[n.document_type]["Notifications"].append(f"{n.name} ({', '.join(filter(None, [n.event, not n.enabled and 'disabled']))})")
+		parts[n.document_type]["Notifications"].append(f"{n.name} ({', '.join(part for part in [n.event, not n.enabled and 'disabled'] if part)})")
 
 
 def _attach_print_formats(parts):

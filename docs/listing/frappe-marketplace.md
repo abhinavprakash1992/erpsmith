@@ -20,7 +20,7 @@ ERPSmith lets Claude, or any MCP client, build and debug customizations on your 
 
 **Sign in, nothing else.** Add `https://<your-site>/api/method/erpsmith.mcp.handle` as a custom connector in Claude and sign in with OAuth on Frappe v15 or v16. No keys to hand out.
 
-**Private by design.** Everything stays in your site's database. No telemetry, no hosted service. The only outside request is the public manual from docs.erpnext.com. Tool results go to the model provider of the client you choose. See the privacy policy in the repository.
+**Private by design.** Everything stays in your site's database. No telemetry, no hosted service. The only outside request is the public manual from docs.erpnext.com. Tool results go to the model provider of the client you choose. Privacy policy: https://erpsmith.vercel.app/privacy
 
 Server script tools need server scripts enabled (a private bench on Frappe Cloud).
 

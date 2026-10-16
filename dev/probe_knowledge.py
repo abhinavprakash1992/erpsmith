@@ -41,7 +41,8 @@ def remove_fixtures():
 	drop_doctype(GADGET)  # commits
 	if frappe.db.exists("Role", ROLE):
 		frappe.delete_doc("Role", ROLE, force=True)
-	frappe.db.commit()
+	# dev script, not app code: commits its fixtures so the separate steps and worker processes that follow see them
+	frappe.db.commit()  # nosemgrep
 
 
 def make_fixtures():
@@ -61,7 +62,8 @@ def make_fixtures():
 		for name, line in zip(SCRIPTS, ('frappe.log("gadget archived")', 'frappe.msgprint("gadget submitted")')):
 			frappe.get_doc({"doctype": "Server Script", "name": name, "script_type": "DocType Event", "reference_doctype": GADGET,
 				"doctype_event": "After Submit", "script": line}).insert()
-	frappe.db.commit()
+	# dev script, not app code: commits its fixtures so the separate steps and worker processes that follow see them
+	frappe.db.commit()  # nosemgrep
 
 
 @contextmanager

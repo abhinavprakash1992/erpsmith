@@ -7,7 +7,9 @@ and so is queueing a background job (the job would run after the rollback, on co
 
 import frappe
 from frappe.model.document import Document
-from frappe.utils import background_jobs
+# Frappe has no hook to veto a background job, so call_method_read wraps get_queue (see _install_queue_guard). The
+# wrapper only acts while this request's read-only flag is set; every other request goes straight to Frappe's get_queue.
+from frappe.utils import background_jobs  # nosemgrep
 
 from erpsmith.registry import InvalidArguments, required_text, tool
 
@@ -30,7 +32,8 @@ def _install_queue_guard():
 		return current(*args, **kwargs)
 
 	get_queue.erpsmith_guard = True
-	background_jobs.get_queue = get_queue
+	# see the comment on the import
+	background_jobs.get_queue = get_queue  # nosemgrep
 
 
 _install_queue_guard()
@@ -60,7 +63,8 @@ def _call(method, args):
 	saved = frappe.local.form_dict
 	frappe.local.form_dict = frappe._dict(args or {})  # some methods read frappe.form_dict instead of their arguments
 	try:
-		result = frappe.call(fn, **(args or {}))
+		# fn passed _resolve: the same override and whitelist checks /api/method runs, as the signed-in user
+		result = frappe.call(fn, **(args or {}))  # nosemgrep
 	finally:
 		frappe.local.form_dict = saved
 	# not hasattr(result, "as_dict"): on a frappe._dict every missing attribute reads as None, so hasattr is always true

@@ -62,7 +62,7 @@ def check_client_script(row):
 		issues.append(_issue("syntax_unbalanced_braces", "error", f"Unbalanced braces: {opening} opening, {closing} closing."))
 	console = [i for i, line in enumerate(script.split("\n"), 1) if "console.log" in line]
 	if console:
-		issues.append(_issue("console_log_found", "warning", f"console.log on lines {', '.join(map(str, console))}."))
+		issues.append(_issue("console_log_found", "warning", f"console.log on lines {', '.join(str(line) for line in console)}."))
 	no_frm = [name for name in re.findall(r"(\w+)\s*\(\s*\)\s*\{", script) if name in KNOWN_EVENTS]
 	if no_frm:
 		issues.append(_issue("missing_frm_param", "error", f"Event handlers without the frm parameter: {', '.join(no_frm)}."))

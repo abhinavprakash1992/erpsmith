@@ -61,7 +61,7 @@ def _doctype_chunk(meta, fields, app, refs, parents, custom, intros, attached):
 	links = [f"{f.options} ({f.fieldname})" for f in fields if f.fieldtype == "Link" and f.options]
 	tables = [f for f in fields if f.fieldtype.startswith("Table") and f.options]
 	by = refs.get(name, [])
-	content = "\n".join(filter(None, [
+	content = "\n".join(part for part in [
 		f"DocType: {name}",
 		f"App: {app} | Module: {meta.module} | DB table: `tab{name}`" + (f" | {', '.join(traits)}" if traits else ""),
 		description and f"Description: {description}",
@@ -71,16 +71,16 @@ def _doctype_chunk(meta, fields, app, refs, parents, custom, intros, attached):
 		by and "Referenced by: " + ", ".join(by[:REFS_SHOWN]) + (f", … +{len(by) - REFS_SHOWN} more" if len(by) > REFS_SHOWN else ""),
 		attached.get(name),
 		"\nFields:\n" + "\n".join(_field_line(f, custom.get(name, ())) for f in fields),
-	]))
+	] if part)
 	labels = list(dict.fromkeys(f.label for f in fields if f.label))[:SUMMARY_LABELS]
-	summary = " ".join(filter(None, [
+	summary = " ".join(part for part in [
 		f"{name}{': ' + description if description else ''}.",
 		intros.get(name),
 		f"{meta.module} module, {app}." + (f" It is a {', '.join(traits)}." if traits else ""),
 		meta.get("istable") and parents.get(name) and f"Line items / rows of {', '.join(dict.fromkeys(parents[name]))}.",
 		tables and "Has child tables: " + ", ".join(f.options for f in tables) + ".",
 		labels and "Fields: " + ", ".join(labels) + ".",
-	]))
+	] if part)
 	return {"kind": "doctype", "chunk_key": f"doctype::{name}", "title": name, "source": f"/app/doctype/{quote(name)}",
 		"summary": summary, "content": content}
 
@@ -140,7 +140,9 @@ def sync(chunks, delete_kinds, commit_every=0):
 			doc.insert(ignore_permissions=True)
 			counts["added"] += 1
 		if commit_every and (counts["added"] + counts["updated"]) % commit_every == 0:
-			frappe.db.commit()
+			# the build is a long background job writing thousands of embedded rows: committing per batch keeps the
+			# transaction small and keeps finished batches if the worker times out (commit_every is 0 in a request)
+			frappe.db.commit()  # nosemgrep
 			vector_cache.bump(DOCTYPE)
 	stale = [k for k in existing if k not in seen and k.split("::", 1)[0] in delete_kinds]
 	for i in range(0, len(stale), 200):
@@ -148,7 +150,8 @@ def sync(chunks, delete_kinds, commit_every=0):
 	counts["deleted"] = len(stale)
 	vector_cache.invalidate(DOCTYPE)
 	if commit_every:
-		frappe.db.commit()
+		# the last batch of the background build (see above)
+		frappe.db.commit()  # nosemgrep
 	return counts
 
 
@@ -272,7 +275,8 @@ def build(include_manual=True, commit=True, only_doctypes=None):
 		counts = sync(chunks, delete_kinds, COMMIT_EVERY if commit else 0)
 		counts["profile"] = profile.sync_profile(profile.profile_notes())
 		if commit:
-			frappe.db.commit()
+			# the background build ends here; commit is False when called in a request
+			frappe.db.commit()  # nosemgrep
 		counts["manual"] = (f"{len(pages)} pages" if pages is not None
 			else "not requested" if not include_manual else "skipped: could not be fetched")
 		return counts

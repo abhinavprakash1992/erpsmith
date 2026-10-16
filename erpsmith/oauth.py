@@ -156,7 +156,8 @@ def register(payload):
 	return body
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+# Guest on purpose: OAuth dynamic client registration (RFC 7591) is unauthenticated; rate limited, see the docstring.
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
 @rate_limit(limit=20, seconds=60 * 60)
 def register_client():
 	"""Unauthenticated by design (RFC 7591): it only creates a client that still needs a signed-in user's consent."""

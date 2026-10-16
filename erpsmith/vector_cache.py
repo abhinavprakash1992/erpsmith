@@ -18,6 +18,7 @@ import time
 
 import frappe
 import numpy as np
+from frappe.query_builder.functions import Count, Max
 from redis.exceptions import RedisError
 
 from erpsmith import vectors
@@ -48,7 +49,9 @@ def _start(client, key):
 def version(doctype):
 	"""The table's current version token, or None when Redis cannot be reached (callers then skip the cache)."""
 	try:
-		client, key = frappe.cache(), redis_key(doctype)
+		# raw get/set/incr on a key make_key already prefixed with the site, because get_value/set_value cannot do the
+		# atomic set-if-absent and incr the version token needs
+		client, key = frappe.cache(), redis_key(doctype)  # nosemgrep
 		token = client.get(key)
 		if token is None:
 			_start(client, key)
@@ -80,7 +83,8 @@ def invalidate(doctype):
 def _fingerprint(doctype):
 	"""(row count, newest `modified`) of the table in this transaction's view. `doctype` is always one of
 	the app's own internal DocTypes, never user input."""
-	return tuple(frappe.db.sql(f"select count(*), max(`modified`) from `tab{doctype}`")[0])
+	table = frappe.qb.DocType(doctype)
+	return tuple(frappe.qb.from_(table).select(Count("*"), Max(table.modified)).run()[0])
 
 
 def _build(doctype, fields, token):

@@ -50,7 +50,8 @@ def clean_up():
 	for dt, name in (("Customer", CUSTOMER), ("Item", ITEM)):
 		if frappe.db.exists(dt, name):
 			frappe.delete_doc(dt, name, force=True)
-	frappe.db.commit()
+	# dev script, not app code: commits its fixtures so the separate steps and worker processes that follow see them
+	frappe.db.commit()  # nosemgrep
 
 
 def knowledge_section(knowledge):
@@ -130,7 +131,8 @@ def main(site):
 	profile_section()
 	clean_up()
 	tools_section(helpers)
-	frappe.db.commit()
+	# dev script, not app code: commits its fixtures so the separate steps and worker processes that follow see them
+	frappe.db.commit()  # nosemgrep
 	print("SMOKE FAILED: " + "; ".join(failures) if failures else "SMOKE OK")
 	return 1 if failures else 0
 
