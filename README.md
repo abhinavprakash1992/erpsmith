@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/logo.svg" alt="ERPSmith logo: an anvil with sparks" width="128" height="128"></p>
+<p align="center"><img src="docs/assets/logo-512.png" alt="ERPSmith logo: a hammer striking an anvil in a shower of sparks" width="128" height="128"></p>
 
 # ERPSmith
 
