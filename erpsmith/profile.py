@@ -67,9 +67,9 @@ def format_naming_series(series_by_doctype):
 
 
 def format_apps(apps, modules_with_rows):
-	lines = [f"- {a['name']}{' ' + a['version'] if a.get('version') else ''}" for a in apps]
+	listed = ", ".join(f"{a['name']}{' ' + a['version'] if a.get('version') else ''}" for a in apps)
 	used = [f"- {app}: {', '.join(modules)}" for app, modules in sorted(modules_with_rows.items()) if modules]
-	return _note("Installed apps on this site:", *lines, used and "Modules whose DocTypes hold records:", *used)
+	return _note(f"Apps installed on this site: {listed}.", used and "Modules whose DocTypes hold records:", *used)
 
 
 def format_workflows(rows):
@@ -81,7 +81,7 @@ def format_workflows(rows):
 
 
 def format_footprint(custom_apps, counts, top_doctypes):
-	return _note(f"Custom apps installed: {', '.join(custom_apps) if custom_apps else 'none'}.",
+	return _note(f"Apps outside the standard set: {', '.join(custom_apps) if custom_apps else 'none'}.",
 		"Customization records: " + ", ".join(f"{n} {label}" for label, n in counts.items()) + ".",
 		top_doctypes and "Most customised DocTypes (custom fields plus property setters):",
 		*(f"- {dt}: {n}" for dt, n in top_doctypes[:DOCTYPES_SHOWN]))
