@@ -14,11 +14,11 @@ ERPSmith lets Claude, or any MCP client, build and debug customizations on your 
 
 **What it does.** 59 tools to read and change DocTypes and fields, client and server scripts, workflows, permissions, print formats, reports, notifications and dashboard charts, plus debug tools for permissions, data integrity, broken links, stuck documents and error logs.
 
-**You approve every change.** Anything that writes waits for a plan you have read and approved. Each plan is kept in Desk as an audit trail. Everything runs as the signed-in user, so it can do only what that user's roles allow, and a few dangerous operations are blocked outright.
+**You approve every change.** Every change to your site's records and customizations waits for a plan you have read and approved; only memory notes are not gated. Plans are kept in Desk as an audit trail for 7 days after they can no longer unlock anything. Everything runs as the signed-in user, so it can do only what that user's roles allow, and a few dangerous operations are blocked outright.
 
 **It remembers.** 96 curated notes on Frappe's script sandbox, working patterns and known fixes come with the app, searchable by meaning. It also indexes your site's own customizations and writes a short site profile, and you can teach it how your company works.
 
-**Sign in, nothing else.** Add the site as a custom connector in Claude and sign in with OAuth on Frappe v15 or v16. No keys to hand out.
+**Sign in, nothing else.** Add `https://<your-site>/api/method/erpsmith.mcp.handle` as a custom connector in Claude and sign in with OAuth on Frappe v15 or v16. No keys to hand out.
 
 **Private by design.** Everything stays in your site's database. No telemetry, no hosted service. The only outside request is the public manual from docs.erpnext.com. Tool results go to the model provider of the client you choose. See the privacy policy in the repository.
 

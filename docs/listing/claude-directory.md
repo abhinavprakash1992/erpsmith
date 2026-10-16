@@ -14,7 +14,7 @@ AI dev copilot for ERPNext: build and debug customizations behind a plan gate
 
 ERPSmith is a Frappe app that adds an MCP endpoint to an ERPNext site (Frappe v15 and v16). Claude signs in as the user with OAuth and can then read, build, debug and fix DocTypes, fields, client and server scripts, workflows, permissions, print formats, reports, notifications and dashboard charts. It has semantic memory of Frappe script-sandbox facts and patterns, an index of the site's own customizations, and a generated site profile.
 
-Every tool runs as the signed-in user, with that user's roles and permissions. Tools that change something are rejected until a plan listing the exact changes has been submitted and approved by the user. Free and open source (MIT), written by Abhinav Prakash.
+Every tool runs as the signed-in user, with that user's roles and permissions. Tools that change the site's records or customizations are rejected until a plan listing the exact changes has been submitted and approved by the user; the tools that write memory notes are the one exception. Free and open source (MIT), written by Abhinav Prakash.
 
 Not affiliated with or endorsed by Frappe Technologies.
 
@@ -28,7 +28,7 @@ OAuth 2.0 with PKCE and dynamic client registration, against the user's own site
 
 ## How the plan gate works
 
-Tools marked read-only are never gated. Tools that write wait for a plan: `submit_plan` records the intended changes and returns a planId; the user reviews the plan; after `approve_plan` the listed changes can run for 15 minutes, each once and with exactly the arguments in the plan. Only the user who made a plan can approve it. A few operations (changing a User's roles, password or API keys, deleting protected DocTypes, deleting more than 10 records in one call) are rejected even with an approved plan.
+Tools marked read-only are never gated, and neither are the plan tools and the three memory-writing tools (`add_memory`, `update_memory`, `delete_memory`). Every other write waits for a plan: `submit_plan` records the intended changes and returns a planId; the user reviews the plan; after the user's explicit yes the assistant calls `approve_plan` as that user, and the listed changes can run for 15 minutes by default (up to 24 hours), each once and with exactly the arguments in the plan. Only the user who made a plan can approve it. A few operations (changing a User's roles, password or API keys, deleting records of protected DocTypes such as User or Company, deleting more than 10 records in one call) are rejected even with an approved plan.
 
 ## Tools (59)
 
@@ -86,12 +86,12 @@ Every tool has a title and a readOnlyHint or destructiveHint annotation.
 - `remove_field`: Removes a Custom Field, or a field of a custom DocType.
 - `reorder_fields`: Changes the form order of a DocType's fields with a field_order Property Setter, as Customize Form does.
 - `set_property`: Overrides one property of a DocType or of one of its fields with a Property Setter, without editing the DocType.
-- `create_client_script`: Creates a Client Script: JavaScript that runs in the browser on a DocType's form or list view, e.g.
+- `create_client_script`: Creates a Client Script: JavaScript that runs in the browser on a DocType's form or list view, for example to auto-fill, validate, show or hide fields.
 - `update_client_script`: Replaces a Client Script's code, or enables or disables it.
 - `create_server_script`: Creates a Server Script: Python run by Frappe's sandbox on a DocType event, as an API method at /api/method/<apiMethod>, on a schedule, or as a permission query.
 - `update_server_script`: Replaces a Server Script's code (checked against the sandbox's limits first), changes its DocType event, or enables or disables it.
 - `apply_script_fix`: Replaces the code of a Client Script or Server Script with a corrected version and, by default, enables it.
-- `create_workflow`: Creates and activates a Workflow for a DocType from states and transitions, e.g.
+- `create_workflow`: Creates and activates a Workflow for a DocType from states and transitions; missing Workflow State and Workflow Action records are created too.
 - `set_permission`: Sets a role's permission rule on a DocType (read, write, create, delete, submit and so on) the way the Role Permission Manager does, keeping every other role's rules.
 - `create_print_format`: Creates a custom Print Format for a DocType from a Jinja HTML template (values as {{ doc.field_name }}) and optional CSS.
 - `create_report`: Creates a custom report: a Script Report (Python, checked against the sandbox's limits like a Server Script), a Query Report (one SQL SELECT) or a Report Builder report.
@@ -111,11 +111,7 @@ Everything is stored in the site's own database. No telemetry. Tool results reac
 
 ## Reviewer test account
 
-Prepare a demo site before submitting (owner action), on a private bench with `server_script_enabled` set to 1:
-
-1. A site with ERPNext installed and ERPSmith installed, with some synthetic data (company "ERPSmith Demo Co", a few items and customers).
-2. A user `reviewer@demo.example` with these roles only: System Manager (the memory and knowledge tools need it), plus Customer and Item read/write roles such as Sales User and Stock User. This is a throwaway demo site, so its data may be changed freely.
-3. Give the reviewers the site's MCP address and the user's password through the submission form, not in this file.
+The reviewers get a demo site with ERPNext and ERPSmith installed and synthetic data (company "ERPSmith Demo Co", a few items and customers), and a user `reviewer@demo.example` with these roles: System Manager (the memory and knowledge tools need it), plus roles that can read and write Customer and Item, such as Sales User and Stock User. The site is a throwaway, so its data may be changed freely. Server scripts are enabled on it.
 
 Prompts to try, in order:
 
@@ -128,3 +124,11 @@ Prompts to try, in order:
 Expected: without an approved plan a write tool returns a short message saying it is waiting for approval; after approval it succeeds, and the change shows in Desk under MCP Plan.
 
 Not affiliated with or endorsed by Frappe Technologies.
+
+## Not part of the submission (owner preparation)
+
+Everything above this heading is listing text. These steps are for the owner and are also on `docs/release/owner-checklist.md`:
+
+1. Build the demo site on a private bench with `server_script_enabled` set to 1, install ERPNext and ERPSmith, and add the synthetic data.
+2. Create the reviewer user with the roles above.
+3. Give the reviewers the site's MCP address (`https://<demo-site>/api/method/erpsmith.mcp.handle`) and the user's password through the submission form, never in this file or the repository.

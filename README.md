@@ -8,7 +8,7 @@ Not affiliated with or endorsed by Frappe Technologies. ERPNext and Frappe are t
 
 ERPSmith is a Frappe app that adds an MCP endpoint to your site. An MCP client such as Claude connects to it, signs in as one of your users, and can then read, build, debug and fix customizations: DocTypes and fields, client and server scripts, workflows, permissions, print formats, reports, notifications and dashboard charts (59 tools in all).
 
-It is for developers, implementers and administrators who customize ERPNext sites. Every tool runs as the signed-in user, with exactly that user's roles and permissions. Every change waits for a plan you approve (see "The plan gate"). It also remembers Frappe sandbox facts, working patterns and your company's own context, so the assistant stops repeating mistakes.
+It is for developers, implementers and administrators who customize ERPNext sites. Every tool runs as the signed-in user, with exactly that user's roles and permissions. Every change to your site's records and customizations waits for a plan you approve (see "The plan gate"); only memory notes are not gated. It also remembers Frappe sandbox facts, working patterns and your company's own context, so the assistant stops repeating mistakes.
 
 ## Install
 
@@ -36,13 +36,13 @@ Create a user such as `ai@your-company.example` that has only the roles the assi
 
 ## The plan gate
 
-Every tool that changes something is rejected until a plan covering it has been submitted, shown to you and approved. The assistant calls `submit_plan` with the exact changes it intends (tool, arguments, reason), you read the plan in Claude and approve it, and `approve_plan` unlocks those changes for 15 minutes. Each change must match a plan entry exactly and can be used once. You can only approve your own plans, and plans are listed read-only in Desk (MCP Plan) as an audit trail. Read-only tools, memory tools and the plan tools themselves are not gated. A few operations are blocked even with an approved plan: changing a User's roles, password or API keys, deleting protected DocTypes, and deleting more than 10 records in one call.
+Every tool that changes something is rejected until a plan covering it has been submitted, shown to you and approved. The assistant calls `submit_plan` with the exact changes it intends (tool, arguments, reason), you read the plan in Claude and say yes, and the assistant then calls `approve_plan` as you. Approval lasts 15 minutes by default (up to 24 hours). Each change must match a plan entry exactly and can be used once. You can only approve your own plans. Plans are listed read-only in Desk (MCP Plan) as an audit trail, kept for 7 days after they can no longer unlock anything and then pruned by a daily scheduled job. Read-only tools, the plan tools and the three tools that write memory notes (`add_memory`, `update_memory`, `delete_memory`) are not gated. A few operations are blocked even with an approved plan: changing a User's roles, password or API keys, deleting records of protected DocTypes such as User or Company, and deleting more than 10 records in one call.
 
 ## Memory, knowledge and the site profile
 
-- **Memory** (`search_memory`, `add_memory`, ...): notes the assistant searches by meaning. 96 notes ship with the app (Frappe sandbox rules, working patterns, known fixes); you and the assistant add your own. Notes are shared by everyone on the site.
+- **Memory** (`search_memory`, `add_memory`, ...): notes the assistant searches by meaning. 96 notes ship with the app (Frappe sandbox rules, working patterns, known fixes); you and the assistant add your own. Notes are shared across the site and readable by System Managers.
 - **Knowledge** (`search_erpnext_knowledge`): an index of your site's DocType structure (custom fields included), workflows, scripts, notifications and print formats, plus the ERPNext user manual. It is built in the background after install and migrate and refreshed when those records change. Script code in the index has secrets scrubbed on a best-effort basis; keep secrets in password fields or site config, not in scripts.
-- **Site profile**: short generated notes (topic `context`) on your companies, currencies, warehouses, naming series, installed apps, workflows and customization footprint.
+- **Site profile**: short generated notes (topic `context`) on your companies, currencies, warehouses, naming series, installed apps, workflows and customization footprint. Edits to these generated notes are overwritten on the next build.
 
 Memory, the knowledge index and the site profile need the System Manager role to read or change.
 
@@ -62,7 +62,7 @@ Saved answers are ordinary memory notes; edit them in Desk or with `update_memor
 
 ## Privacy
 
-Everything ERPSmith stores lives in your site's own database. It has no telemetry and no hosted service. Tool results go to the model provider behind the MCP client you use, as with any tool; the only other network call is the public ERPNext manual fetch from docs.erpnext.com. Plans keep their arguments in plaintext for the audit trail and are pruned after 7 days. DocType metadata is readable by any signed-in user through `get_doctype` and the debug tools, as it is through Frappe's own desk. Read [PRIVACY.md](PRIVACY.md) for the full policy.
+Everything ERPSmith stores lives in your site's own database. It has no telemetry and no hosted service. Tool results go to the model provider behind the MCP client you use, as with any tool; the only other network call is the public ERPNext manual fetch from docs.erpnext.com. Plans keep their arguments in plaintext as an audit trail and are pruned once they are more than 7 days old and can no longer unlock anything (a daily job, so the scheduler has to be running). DocType metadata is readable by any signed-in user through `get_doctype` and the debug tools, as it is through Frappe's own desk. Read [PRIVACY.md](PRIVACY.md) for the full policy.
 
 ## Development
 
