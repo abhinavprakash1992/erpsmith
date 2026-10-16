@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Frappe ${{ matrix.frappe }}, Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - frappe: version-15
+            python: "3.12"
+            node: 22
+          - frappe: version-16
+            python: "3.14"
+            node: 24
+
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -uroot -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+      redis-cache:
+        image: redis:7
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:7
+        ports:
+          - 11000:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same guard as dev/test.sh. The patterns are bracketed so this file does not match itself.
+      - name: Customer-specific text and private data
+        run: |
+          tracked=$(git ls-files private)
+          if [ -n "$tracked" ]; then
+            echo "private/ holds customer data and must never be tracked"; exit 1
+          fi
+          if grep -rnIiE "edif[y]|kuzaga[n]" --exclude-dir=.git --exclude-dir=.superpowers --exclude-dir=private .; then
+            echo "Customer-specific text found above: remove it before committing."; exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install system packages and bench
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcups2-dev mariadb-client
+          pip install frappe-bench
+
+      - name: Database character set
+        run: |
+          mariadb --host 127.0.0.1 --port 3306 -uroot -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
+          mariadb --host 127.0.0.1 --port 3306 -uroot -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
+
+      - name: Init bench on ${{ matrix.frappe }}
+        run: |
+          bench init --skip-redis-config-generation --skip-assets --frappe-branch ${{ matrix.frappe }} --python "$(which python)" ~/frappe-bench
+          cd ~/frappe-bench
+          bench set-config -g db_host 127.0.0.1
+          bench set-config -g redis_cache redis://127.0.0.1:13000
+          bench set-config -g redis_queue redis://127.0.0.1:11000
+          bench set-config -g redis_socketio redis://127.0.0.1:11000
+
+      - name: Get the app from this checkout
+        run: |
+          cd ~/frappe-bench
+          bench get-app erpsmith "$GITHUB_WORKSPACE"
+
+      - name: New site with tests allowed, install the app
+        run: |
+          cd ~/frappe-bench
+          bench new-site test_site --db-root-password root --admin-password admin --mariadb-user-host-login-scope='%'
+          bench --site test_site set-config allow_tests true
+          bench --site test_site install-app erpsmith
+
+      # `bench run-tests` exits 0 on v15 even when tests fail, so the next step judges by what was printed.
+      - name: Run the tests
+        run: |
+          cd ~/frappe-bench
+          bench --site test_site run-tests --app erpsmith 2>&1 | tee "$RUNNER_TEMP/tests.log" || true
+
+      - name: Fail unless the last "Ran N tests" line is followed by OK
+        run: |
+          log="$RUNNER_TEMP/tests.log"
+          if grep -E '^Ran [0-9]+ tests?' "$log" | tail -1 \
+              && awk '/^Ran [0-9]+ tests?/{r=1; next} r && /^OK/{ok=1} END{exit !ok}' "$log" \
+              && ! grep -qE '^(Traceback|ERROR:)|FAILED \(' "$log"; then
+            echo "Tests passed"
+          else
+            echo "Tests failed or did not finish: see the Run the tests step"; exit 1
+          fi
