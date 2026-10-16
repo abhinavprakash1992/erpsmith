@@ -43,7 +43,7 @@ The first probe run put `profile__footprint` ahead of `profile__apps` for "which
 - Scrubber: secrets written in other string forms (see the scrubber fix commit ce03096) are now scrubbed before a script reaches a chunk.
 - Refresh: Frappe checks `deduplicate` when `frappe.enqueue` is called but pushes the job after commit, so N saves in one transaction pushed the job N times. `on_source_change` now queues once per transaction (a flag cleared on commit and on rollback).
 - Single DocTypes: `_have` used `table_exists`, which is false for Single DocTypes, so ERPNext defaults would never appear. It now checks the DocType record.
-- Naming series: the note listed every DocType with a naming series field. It now keeps DocTypes whose table holds rows, most rows first, capped at 40 lines.
+- Naming series: the note listed every DocType with a naming series field. It now keeps DocTypes whose table holds rows (an exact EXISTS check; InnoDB row estimates drifted between builds and re-embedded the note), alphabetically, capped at 40 lines.
 - A profile note whose gatherer raises is logged and skipped instead of failing the build after the chunks were committed.
 
 ## For Plan 4

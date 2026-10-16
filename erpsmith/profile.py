@@ -124,17 +124,21 @@ def _warehouses():
 	return format_warehouses([{"name": g, "children": children.get(g, 0)} for g in groups], default, valuation)
 
 
-def _row_counts():
-	"""{DocType: estimated rows} for tables that hold rows, from one information_schema query (InnoDB estimates, enough for
-	"does it hold records" and "which holds most"); None where that is not available (MariaDB only)."""
-	if frappe.db.db_type != "mariadb":
-		return None
-	rows = frappe.db.sql("select table_name, table_rows from information_schema.tables where table_schema = database() "
-		"and table_name like 'tab%%' and table_rows > 0")
-	return {name[3:]: int(n) for name, n in rows}
+def _tables_with_rows():
+	"""DocTypes whose table holds at least one row. Exact (one EXISTS per table, which reads a single index entry), because
+	InnoDB's information_schema row estimates drift between builds and would rewrite and re-embed the notes every time."""
+	names = frappe.get_all("DocType", filters={"issingle": 0, "is_virtual": 0}, pluck="name")
+	held = set()
+	for name in names:
+		try:
+			if frappe.db.sql(f"select exists(select 1 from `tab{name}` limit 1)")[0][0]:
+				held.add(name)
+		except Exception:  # a DocType whose table was never created (or was dropped) holds no rows
+			continue
+	return held
 
 
-def _naming_series(row_counts):
+def _naming_series(held):
 	options = {}
 	for source, doctype_field in (("DocField", "parent"), ("Custom Field", "dt")):
 		for r in frappe.get_all(source, filters={"fieldname": "naming_series"}, fields=[doctype_field, "options"]):
@@ -142,22 +146,21 @@ def _naming_series(row_counts):
 	for r in frappe.get_all("Property Setter", filters={"field_name": "naming_series", "property": "options"}, fields=["doc_type", "value"]):
 		options[r.doc_type] = r.value
 	series = {dt: [s.strip() for s in (text or "").split("\n") if s.strip()] for dt, text in options.items()}
-	series = {dt: s for dt, s in series.items() if s and (row_counts is None or dt in row_counts)}
-	order = sorted(series, key=lambda dt: (-(row_counts or {}).get(dt, 0), dt))
-	return format_naming_series({dt: series[dt] for dt in order})
+	series = {dt: s for dt, s in series.items() if s and dt in held}
+	return format_naming_series({dt: series[dt] for dt in sorted(series)})  # alphabetical: stable from build to build
 
 
-def _modules_with_rows(row_counts):
+def _modules_with_rows(held):
 	"""{app: [module]} for modules owning a DocType whose table holds rows."""
 	app_of = {m.name: m.app_name for m in frappe.get_all("Module Def", fields=["name", "app_name"])}
 	modules = {}
 	for dt in frappe.get_all("DocType", fields=["name", "module"]):
-		if dt.name in (row_counts or {}) and app_of.get(dt.module):
+		if dt.name in held and app_of.get(dt.module):
 			modules.setdefault(app_of[dt.module], set()).add(dt.module)
 	return {app: sorted(mods) for app, mods in modules.items()}
 
 
-def _apps(row_counts):
+def _apps(held):
 	apps = []
 	for name in frappe.get_installed_apps():
 		try:
@@ -165,7 +168,7 @@ def _apps(row_counts):
 		except Exception:
 			version = None
 		apps.append({"name": name, "version": version})
-	return format_apps(apps, _modules_with_rows(row_counts))
+	return format_apps(apps, _modules_with_rows(held))
 
 
 def _workflows():
@@ -191,9 +194,9 @@ def _footprint():
 def profile_notes():
 	"""[{key, title, content}] for each note whose source DocTypes exist on this site. A note that fails is logged and left out."""
 	erpnext = _have("Company")
-	rows = _row_counts()
+	held = _tables_with_rows()
 	wanted = [("companies", erpnext, _companies), ("currencies", True, _currencies), ("warehouses", erpnext and _have("Warehouse"), _warehouses),
-		("naming-series", True, lambda: _naming_series(rows)), ("apps", True, lambda: _apps(rows)), ("workflows", True, _workflows),
+		("naming-series", True, lambda: _naming_series(held)), ("apps", True, lambda: _apps(held)), ("workflows", True, _workflows),
 		("footprint", True, _footprint)]
 	notes = []
 	for key, present, make in wanted:

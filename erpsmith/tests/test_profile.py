@@ -57,7 +57,7 @@ class TestFormatters(FrappeTestCase):
 		text = profile.format_naming_series(series)
 		self.assertEqual(text.count("\n- "), 40)
 		self.assertIn("and 5 more", text)
-		self.assertLess(text.index("Doc 45"), text.index("Doc 06"))  # most rows first: the caller's order stands
+		self.assertLess(text.index("Doc 45"), text.index("Doc 06"))  # the formatter keeps the order it is given
 		self.assertNotIn("Doc 05", text)
 
 	def test_other_formatters_open_with_the_header(self):
@@ -164,3 +164,13 @@ class TestProfile(FrappeTestCase):
 	def test_seed_files_cannot_use_profile_keys(self):
 		with self.assertRaisesRegex(ValueError, "profile-"):
 			memory.check_seeds([{"seed_key": "profile-x", "topic": "context", "title": "t", "content": "c"}])
+
+
+class TestTablesWithRows(FrappeTestCase):
+	def test_holding_rows_is_exact_not_an_estimate(self):
+		# InnoDB's information_schema estimates lag on a fresh site (seen in CI), which rewrote the notes on every build
+		frappe.db.delete("Note", {"title": "ERPSmith Test Rows"})
+		before = profile._tables_with_rows()
+		frappe.get_doc({"doctype": "Note", "title": "ERPSmith Test Rows"}).insert()
+		self.assertIn("Note", profile._tables_with_rows())
+		self.assertIn("DocType", before)
