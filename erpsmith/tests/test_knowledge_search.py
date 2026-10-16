@@ -100,7 +100,7 @@ class TestKnowledgeSearch(FrappeTestCase):
 		schema = mcp.SCHEMAS["search_erpnext_knowledge"]["inputSchema"]
 		self.assertEqual(schema["required"], ["query"])
 		self.assertIn("topK", schema["properties"])
-		self.assertEqual(schema["properties"]["kind"]["enum"], ["doctype", "manual", "doc"])
+		self.assertEqual(schema["properties"]["kind"]["enum"], ["doctype", "manual", "doc", "customization"])
 
 	def test_rule_0_names_both_tools_and_the_role(self):
 		for text in ("search_memory", "search_erpnext_knowledge", "System Manager", "user manual"):

@@ -5,7 +5,7 @@ search_memory finds this site's saved reference notes by meaning: Frappe sandbox
   • writing or editing a script → search_memory("<the operation>")
   • an error → search_memory("<error text or symptom>")
   • creating a document → search_memory("<doctype> required fields")
-search_erpnext_knowledge covers this site's DocType structure (custom fields included) and the ERPNext user manual. add_memory saves a new fact, fix or pattern for next time. Memory is shared by every user of the site and needs the System Manager role.
+search_erpnext_knowledge covers this site's DocType structure (custom fields included), this site's workflows, scripts, notifications and print formats, and the ERPNext user manual. add_memory saves a new fact, fix or pattern for next time. Memory is shared by every user of the site and needs the System Manager role.
 
 RULE 1 — NO PYTHON IMPORTS IN SERVER SCRIPTS
 Server Scripts, API scripts and Script Reports run in Frappe's RestrictedPython sandbox: every import raises ImportError, and frappe and json are already available (date helpers live in frappe.utils). create_server_script, update_server_script, apply_script_fix and create_report check a script against the sandbox's limits before saving it and report each problem by line, naming a working replacement where there is one. search_memory("server script sandbox") finds more patterns.

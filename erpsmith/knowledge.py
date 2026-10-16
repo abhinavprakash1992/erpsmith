@@ -1,4 +1,4 @@
-"""Knowledge: this site's DocType structure and the ERPNext user manual, searchable by meaning.
+"""Knowledge: this site's DocType structure and customizations and the ERPNext user manual, searchable by meaning.
 
 Chunks live in MCP Knowledge Chunk. `build` (one background job, Task 10) keeps them current: DocType chunks
 come from frappe.get_meta, so they match this site's version and customizations; manual chunks come from
@@ -14,7 +14,7 @@ from urllib.parse import quote
 import frappe
 import requests
 
-from erpsmith import memory, vector_cache, vectors
+from erpsmith import customization, memory, vector_cache, vectors
 from erpsmith.registry import InvalidArguments, clamp, required_text, tool
 
 DOCTYPE = "MCP Knowledge Chunk"
@@ -40,10 +40,12 @@ def _field_line(f, custom):
 	return f"- {f.fieldname} ({kind}){label}{' *required' if f.reqd else ''}{' [custom]' if f.fieldname in custom else ''}"
 
 
-def _doctype_chunk(meta, fields, app, refs, parents, custom, intros):
+def _doctype_chunk(meta, fields, app, refs, parents, custom, intros, attached):
 	"""The chunk for one DocType. Port of the Node build: the content is the full record a search returns;
 	the summary is plain English (labels, parents, the manual's intro), because the embedder reads about
-	256 tokens and matches prose far better than a list of field names."""
+	256 tokens and matches prose far better than a list of field names. What is attached to the DocType
+	(workflow, scripts, notifications, print formats) is one more content line, left out of the summary so it
+	does not shift ranking."""
 	name = meta.name
 	traits = [text for flag, text in (
 		(meta.get("istable"), "child table"),
@@ -64,6 +66,7 @@ def _doctype_chunk(meta, fields, app, refs, parents, custom, intros):
 		tables and "Child tables: " + ", ".join(f"{f.fieldname} → {f.options}" for f in tables),
 		links and "Links to: " + ", ".join(links),
 		by and "Referenced by: " + ", ".join(by[:REFS_SHOWN]) + (f", … +{len(by) - REFS_SHOWN} more" if len(by) > REFS_SHOWN else ""),
+		attached.get(name),
 		"\nFields:\n" + "\n".join(_field_line(f, custom.get(name, ())) for f in fields),
 	]))
 	labels = list(dict.fromkeys(f.label for f in fields if f.label))[:SUMMARY_LABELS]
@@ -83,6 +86,7 @@ def doctype_chunks(intros=None, only=None):
 	"""One chunk per DocType on this site. They come from get_meta, so custom fields, property setters and
 	custom apps are included. `only` limits the set to the named DocTypes."""
 	intros = intros or {}
+	attached = customization.attachments()
 	apps = {m.name: m.app_name for m in frappe.get_all("Module Def", fields=["name", "app_name"])}
 	custom = defaultdict(set)
 	for row in frappe.get_all("Custom Field", fields=["dt", "fieldname"]):
@@ -104,7 +108,7 @@ def doctype_chunks(intros=None, only=None):
 				refs[f.options].append(f"{meta.name}.{f.fieldname}" + ("" if f.fieldtype == "Link" else f" ({f.fieldtype})"))
 				if f.fieldtype != "Link":
 					parents[f.options].append(meta.name)
-	return [_doctype_chunk(meta, fields, app, refs, parents, custom, intros) for meta, fields, app in infos]
+	return [_doctype_chunk(meta, fields, app, refs, parents, custom, intros, attached) for meta, fields, app in infos]
 
 
 def sync(chunks, delete_kinds, commit_every=0):
@@ -255,8 +259,8 @@ def build(include_manual=True, commit=True, only_doctypes=None):
 	pages = fetch_manual() if include_manual else None
 	manual = manual_chunks(pages) if pages is not None else []
 	intros = _intros(manual) if pages is not None else _stored_intros()
-	chunks = doctype_chunks(intros=intros, only=only_doctypes) + manual
-	delete_kinds = (("doctype",) if only_doctypes is None else ()) + (("manual",) if pages is not None else ())
+	chunks = doctype_chunks(intros=intros, only=only_doctypes) + customization.customization_chunks() + manual
+	delete_kinds = (("doctype", "customization") if only_doctypes is None else ()) + (("manual",) if pages is not None else ())
 	counts = sync(chunks, delete_kinds, COMMIT_EVERY if commit else 0)
 	counts["manual"] = (f"{len(pages)} pages" if pages is not None
 		else "not requested" if not include_manual else "skipped: could not be fetched")
@@ -274,7 +278,7 @@ def enqueue_build():
 
 
 MAX_RESULT_CHARS = 6000  # a big DocType (Sales Invoice) is about 15,000 characters; keep results cheap
-KINDS = {"doctype": "doctype", "manual": "manual", "doc": "manual"}  # "doc" is the Node server's word for the manual
+KINDS = {"doctype": "doctype", "manual": "manual", "doc": "manual", "customization": "customization"}  # "doc" is the Node server's word for the manual
 EMPTY_NOTE = ("The knowledge index is empty. It is built in the background after install or migrate; "
 	"to build it now, run: bench --site <site> execute erpsmith.knowledge.build")
 
@@ -284,7 +288,7 @@ def search_erpnext_knowledge(query, topK=5, kind=None):
 	frappe.has_permission(DOCTYPE, "read", throw=True)
 	query = required_text("query", query)[:memory.MAX_QUERY_CHARS]
 	if kind and kind not in KINDS:
-		raise InvalidArguments('kind must be "doctype" or "manual" ("doc" also means "manual")')
+		raise InvalidArguments('kind must be "doctype", "manual" ("doc" also means "manual") or "customization"')
 	k = clamp("topK", topK, 5, 1, 20)
 	hits = vector_cache.search(DOCTYPE, vectors.embed(query), k, ("kind",), {"kind": KINDS[kind]} if kind else None)
 	chunks = {r.name: r for r in frappe.get_all(

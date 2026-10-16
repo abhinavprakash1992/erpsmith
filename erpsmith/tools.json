@@ -179,14 +179,14 @@
   {
     "name": "search_erpnext_knowledge",
     "title": "Search ERPNext Knowledge",
-    "description": "Semantic search over two sources built for this site: the structure of every DocType on the site (fields, types, required flags, child tables, what each links to and what links to it, custom fields and custom apps included) and the ERPNext user manual. Returns the best matches with kind, title, source, content and a similarity score. Use it to learn which DocType holds what, how documents flow or how a feature is set up. The index is built in the background after install or migrate. Requires the System Manager role.",
+    "description": "Semantic search over three sources built for this site: the structure of every DocType on the site (fields, types, required flags, child tables, what each links to and what links to it, custom fields and custom apps included, plus the workflow, scripts, notifications and print formats attached to it), this site's own workflows, server and client scripts, notifications and print formats (kind customization), and the ERPNext user manual. Returns the best matches with kind, title, source, content and a similarity score. Use it to learn which DocType holds what, how documents flow or how a feature is set up. The index is built in the background after install or migrate. Requires the System Manager role.",
     "inputSchema": {
       "type": "object",
       "required": ["query"],
       "properties": {
         "query": {"type": "string", "description": "What to look up, in natural language: a feature, a process, a DocType or a field."},
         "topK": {"type": "number", "description": "How many results to return (default 5, max 20)."},
-        "kind": {"type": "string", "enum": ["doctype", "manual", "doc"], "description": "doctype = this site's DocType structure; manual = ERPNext user-manual pages ('doc' means the same). Omit to search both."}
+        "kind": {"type": "string", "enum": ["doctype", "manual", "doc", "customization"], "description": "doctype = this site's DocType structure; manual = ERPNext user-manual pages ('doc' means the same); customization = this site's workflows, scripts, notifications and print formats. Omit to search all three."}
       }
     }
   },

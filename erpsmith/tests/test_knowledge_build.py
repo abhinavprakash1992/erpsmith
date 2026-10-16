@@ -5,7 +5,7 @@ import frappe
 import requests
 from frappe.tests.utils import FrappeTestCase
 
-from erpsmith import install, knowledge, memory
+from erpsmith import customization, install, knowledge, memory
 from erpsmith.tests.helpers import counted_sessions, empty_knowledge_table, knowledge_chunk
 
 DOCTYPE = "MCP Knowledge Chunk"
@@ -147,7 +147,7 @@ class TestBuild(FrappeTestCase):
 	def test_build_adds_doctype_and_manual_chunks(self):
 		manual = knowledge.manual_chunks(PAGES)
 		out = self.run_build(PAGES)
-		self.assertEqual((out["added"], out["manual"]), (3 + len(manual), f"{len(PAGES)} pages"))
+		self.assertEqual((out["added"], out["manual"]), (3 + len(manual) + len(customization.customization_chunks()), f"{len(PAGES)} pages"))
 		role = frappe.get_doc(DOCTYPE, "doctype::Role")
 		self.assertIn("A Role is a set of permissions", role.summary)  # the intro of the manual page of the same name
 

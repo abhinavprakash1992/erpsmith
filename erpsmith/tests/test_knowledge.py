@@ -15,7 +15,7 @@ class TestKnowledgeChunkDoctype(FrappeTestCase):
 		meta = frappe.get_meta(DOCTYPE)
 		for name in ("kind", "title", "source", "chunk_key", "summary", "content", "content_hash", "vector"):
 			self.assertTrue(meta.has_field(name), name)
-		self.assertEqual(meta.get_field("kind").options.split("\n"), ["doctype", "manual"])
+		self.assertEqual(meta.get_field("kind").options.split("\n"), ["doctype", "manual", "customization"])
 		self.assertEqual({p.role for p in meta.permissions}, {"System Manager"})
 		for name in ("summary", "content_hash", "vector"):
 			self.assertTrue(meta.get_field(name).hidden, name)
@@ -55,7 +55,7 @@ class TestDoctypeChunks(FrappeTestCase):
 	def test_fields_defined_by_a_custom_field_are_marked(self):
 		meta = frappe.get_meta("ToDo")
 		fields = [f for f in meta.fields if f.fieldtype not in knowledge.LAYOUT]
-		chunk = knowledge._doctype_chunk(meta, fields, "frappe", {}, {}, {"ToDo": {"priority"}}, {})
+		chunk = knowledge._doctype_chunk(meta, fields, "frappe", {}, {}, {"ToDo": {"priority"}}, {}, {})
 		lines = {line.split(" ")[1]: line for line in chunk["content"].splitlines() if line.startswith("- ")}
 		self.assertTrue(lines["priority"].endswith("[custom]"))
 		self.assertNotIn("[custom]", lines["status"])
