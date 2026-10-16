@@ -32,7 +32,8 @@ def rss_mb():
 def remove_fixtures():
 	from erpsmith.tests.helpers import drop_doctype
 
-	frappe.set_user("Administrator")
+	# dev script, not app code: run from the bench CLI on a dev site, where it acts as Administrator
+	frappe.set_user("Administrator")  # nosemgrep
 	for name in SCRIPTS:
 		if frappe.db.exists("Server Script", name):
 			frappe.delete_doc("Server Script", name, force=True)
@@ -108,7 +109,8 @@ def site_cases(knowledge, memory):
 def main(site):
 	frappe.init(site=site, sites_path=".")
 	frappe.connect()
-	frappe.set_user("Administrator")
+	# dev script, not app code: run from the bench CLI on a dev site, where it acts as Administrator
+	frappe.set_user("Administrator")  # nosemgrep
 	frappe.flags.in_test = True  # the refresh hook would queue builds for the fixtures
 	from erpsmith import knowledge, memory
 

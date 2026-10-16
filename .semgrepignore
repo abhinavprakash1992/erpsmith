@@ -1,0 +1,15 @@
+# A .semgrepignore replaces semgrep's built-in ignore list, so this repeats it and adds the tokenizer data file
+# (a 700 KB JSON vocabulary that times the scanner out).
+:include .gitignore
+.git/
+node_modules/
+build/
+dist/
+vendor/
+.env/
+.venv/
+.tox/
+*.min.js
+test/
+tests/
+erpsmith/embedding/tokenizer.json

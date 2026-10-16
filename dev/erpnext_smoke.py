@@ -121,7 +121,8 @@ def main(site):
 		return 2
 	frappe.init(site=site, sites_path=".")
 	frappe.connect()
-	frappe.set_user("Administrator")
+	# dev script, not app code: run from the bench CLI on a dev site, where it acts as Administrator
+	frappe.set_user("Administrator")  # nosemgrep
 	frappe.flags.in_test = True  # the refresh hook would queue builds for the smoke's own records
 	from erpsmith import knowledge
 	from erpsmith.tests import helpers
