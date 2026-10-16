@@ -17,6 +17,7 @@ from erpsmith import registry
 UNGATED = {"submit_plan", "approve_plan", "add_memory", "update_memory", "delete_memory"}
 STATUS = {"Pending Approval": "pending_approval", "Approved": "approved"}
 DEFAULT_TTL_MINUTES = 15
+PLAN_RETENTION_DAYS = 7
 MAX_TTL_MINUTES = 1440
 
 
@@ -112,6 +113,18 @@ def get_current_plan():
 	}}
 
 
+def prune_plans(days=PLAN_RETENTION_DAYS):
+	"""Delete plans created more than `days` ago that can no longer unlock anything: every change consumed, expired, or never
+	approved. Returns how many. Runs daily (hooks.scheduler_events)."""
+	old = frappe.get_all("MCP Plan", filters={"creation": ("<", add_to_date(now_datetime(), days=-days))},
+		fields=["name", "status", "expires_at"])
+	has_unused = set(frappe.get_all("MCP Plan Change", filters={"parent": ("in", [p.name for p in old]), "consumed": 0}, pluck="parent"))
+	dead = [p.name for p in old if p.status != "Approved" or _status(p.status, p.expires_at) == "expired" or p.name not in has_unused]
+	for name in dead:
+		frappe.delete_doc("MCP Plan", name, ignore_permissions=True, force=True)
+	return len(dead)
+
+
 def _unused_changes(plan_names):
 	return frappe.get_all("MCP Plan Change", filters={"parent": ("in", plan_names), "consumed": 0},
 		fields=["name", "parent", "idx", "tool", "args"], order_by="creation asc, idx asc")
@@ -184,26 +197,35 @@ USER_SECURITY_FIELDS = ("roles", "password", "new_password", "api_key", "api_sec
 CHILD_TABLE_FIELDS = {"roles", "permissions", "items", "taxes"}
 
 
+def _check_user_fields(fields):
+	attempting = [f for f in USER_SECURITY_FIELDS if f in fields]
+	if attempting:
+		raise DangerousOp(
+			f"DANGEROUS OP BLOCKED — Never modify User.{', '.join(attempting)} through the API.\n"
+			"Reason: set_value on child tables (roles) REPLACES all rows, wiping every role from the user.\n"
+			"Safe alternatives:\n"
+			"  • User roles → Desk: User > [user] > Roles\n"
+			"  • Password reset → Desk: User > [user] > Reset Password\n"
+			"  • API keys → Desk: User > [user] > API Access\n"
+			"See RULE 16."
+		)
+
+
+def _check_protected_delete(doctype):
+	if isinstance(doctype, str) and doctype in PROTECTED_DOCTYPES:
+		raise DangerousOp(
+			f"DANGEROUS OP BLOCKED — Deleting from '{doctype}' can break ERPNext entirely.\n"
+			"If you genuinely need this, do it in Desk with proper confirmation. See RULE 16."
+		)
+
+
 def check_dangerous_op(tool, args):
 	"""Operations blocked even with an approved plan (RULE 16)."""
 	data = args.get("data")
 	if tool in ("create_record", "update_record") and args.get("doctype") == "User" and isinstance(data, dict):
-		attempting = [f for f in USER_SECURITY_FIELDS if f in data]
-		if attempting:
-			raise DangerousOp(
-				f"DANGEROUS OP BLOCKED — Never modify User.{', '.join(attempting)} through the API.\n"
-				"Reason: set_value on child tables (roles) REPLACES all rows, wiping every role from the user.\n"
-				"Safe alternatives:\n"
-				"  • User roles → Desk: User > [user] > Roles\n"
-				"  • Password reset → Desk: User > [user] > Reset Password\n"
-				"  • API keys → Desk: User > [user] > API Access\n"
-				"See RULE 16."
-			)
-	if tool == "delete_record" and isinstance(args.get("doctype"), str) and args["doctype"] in PROTECTED_DOCTYPES:
-		raise DangerousOp(
-			f"DANGEROUS OP BLOCKED — Deleting from '{args['doctype']}' can break ERPNext entirely.\n"
-			"If you genuinely need this, do it in Desk with proper confirmation. See RULE 16."
-		)
+		_check_user_fields(data)
+	if tool == "delete_record":
+		_check_protected_delete(args.get("doctype"))
 	if tool != "call_method":
 		return
 	method, margs = args.get("method"), args.get("args")
@@ -218,10 +240,18 @@ def check_dangerous_op(tool, args):
 			f"DANGEROUS OP BLOCKED — Bulk delete of {len(bulk)} records in one call.\n"
 			"Max 10 per call. Split into batches and get approval for each batch. See RULE 16."
 		)
+	if method == "frappe.client.delete":
+		_check_protected_delete(margs.get("doctype"))
+	if method in ("frappe.client.save", "frappe.client.insert"):
+		doc = _json_value(margs.get("doc"))  # the client methods take the document as a JSON string too
+		if isinstance(doc, dict) and doc.get("doctype") == "User":
+			_check_user_fields(doc)
 	if method == "frappe.client.set_value":
 		fieldname = margs.get("fieldname")
 		if isinstance(fieldname, str) and not margs.get("value"):
 			fieldname = _json_value(fieldname, fieldname)  # set_value reads a JSON object string as several fields
+		if margs.get("doctype") == "User":
+			_check_user_fields(fieldname if isinstance(fieldname, (dict, list, str)) else ())
 		if isinstance(fieldname, (dict, list)) or (isinstance(fieldname, str) and fieldname in CHILD_TABLE_FIELDS):
 			raise DangerousOp(
 				f"DANGEROUS OP BLOCKED — frappe.client.set_value with fieldname='{fieldname}' replaces the entire child table.\n"

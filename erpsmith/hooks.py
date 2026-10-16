@@ -16,6 +16,9 @@ after_request = ["erpsmith.mcp.add_www_authenticate"]
 after_install = "erpsmith.install.after_install"
 after_migrate = ["erpsmith.install.after_migrate"]
 
+# Plans that can no longer unlock anything are deleted after a week
+scheduler_events = {"daily": ["erpsmith.guards.prune_plans"]}
+
 # Refresh the knowledge index when a record it is built from changes (the list is knowledge.REFRESH_DOCTYPES)
 doc_events = {
 	"Workflow": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},

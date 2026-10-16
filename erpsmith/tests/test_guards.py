@@ -245,6 +245,21 @@ class TestDangerousOps(FrappeTestCase):
 				guards.check_dangerous_op(tool, {"doctype": "User", "name": "x", "data": {"roles": []}})
 		guards.check_dangerous_op("update_record", {"doctype": "User", "name": "x", "data": {"first_name": "A"}})
 
+	def test_user_security_fields_are_blocked_through_call_method(self):
+		cm = lambda method, **args: {"method": method, "args": args}
+		blocked = [
+			cm("frappe.client.set_value", doctype="User", name="x", fieldname="new_password", value="p"),
+			cm("frappe.client.set_value", doctype="User", name="x", fieldname={"enabled": 0}),
+			cm("frappe.client.save", doc={"doctype": "User", "roles": []}),
+			cm("frappe.client.insert", doc={"doctype": "User", "roles": []}),
+			cm("frappe.client.delete", doctype="User", name="x"),
+		]
+		for args in blocked:
+			with self.assertRaises(DangerousOp, msg=args):
+				guards.check_dangerous_op("call_method", args)
+		guards.check_dangerous_op("call_method", cm("frappe.client.set_value", doctype="User", name="x", fieldname="first_name", value="A"))
+		guards.check_dangerous_op("call_method", cm("frappe.client.save", doc={"doctype": "User", "first_name": "A"}))
+
 	def test_core_doctypes_cannot_be_deleted(self):
 		with self.assertRaisesRegex(DangerousOp, "Company"):
 			guards.check_dangerous_op("delete_record", {"doctype": "Company", "name": "X"})
@@ -280,6 +295,40 @@ class TestDangerousOps(FrappeTestCase):
 			guards.check_dangerous_op("update_record", args)
 		for doctype in (["User"], {"a": 1}, None):  # delete_record with a doctype that is not a string
 			guards.check_dangerous_op("delete_record", {"doctype": doctype, "name": "x"})
+
+
+class TestPruning(FrappeTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+		for name in frappe.get_all("MCP Plan", filters={"owner": "Administrator"}, pluck="name"):
+			frappe.delete_doc("MCP Plan", name, ignore_permissions=True, force=True)
+
+	def test_old_plans_are_pruned_and_live_ones_kept(self):
+		old = now_datetime() - timedelta(days=8)
+		args = upd("DN-PR", "p")
+		consumed = plan(("update_record", args))
+		guards.approve_plan(consumed)
+		guards.check_gate("update_record", args)
+		expired = plan(("update_record", args))
+		guards.approve_plan(expired)
+		frappe.db.set_value("MCP Plan", expired, "expires_at", now_datetime() - timedelta(days=7, hours=12))
+		pending = plan(("update_record", args))
+		for name in (consumed, expired, pending):
+			frappe.db.set_value("MCP Plan", name, "creation", old)
+		fresh = plan(("update_record", args))
+		guards.approve_plan(fresh)
+
+		self.assertEqual(guards.prune_plans(), 3)
+		self.assertEqual(frappe.get_all("MCP Plan", filters={"owner": "Administrator"}, pluck="name"), [fresh])
+		self.assertEqual(frappe.db.count("MCP Plan Change", {"parent": ("in", [consumed, expired, pending])}), 0)
+		self.assertIn("erpsmith.guards.prune_plans", frappe.get_hooks("scheduler_events")["daily"])
+
+	def test_an_old_plan_with_an_unused_live_change_is_kept(self):
+		old_but_live = plan(("update_record", upd("DN-PL", "p")))
+		guards.approve_plan(old_but_live, ttlMinutes=1440)
+		frappe.db.set_value("MCP Plan", old_but_live, "creation", now_datetime() - timedelta(days=8))
+		frappe.db.set_value("MCP Plan", old_but_live, "expires_at", now_datetime() + timedelta(hours=1))
+		self.assertEqual(guards.prune_plans(), 0)
 
 
 class TestPlanToolsOverMCP(FrappeTestCase):

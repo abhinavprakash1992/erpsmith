@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import secrets
 import threading
 from unittest.mock import patch
@@ -87,6 +88,24 @@ class TestDispatch(FrappeTestCase):
 		self.assertTrue(err)
 		self.assertEqual(body["type"], "TypeError")
 		self.assertIn("input schema", body["suggestion"])
+
+	def test_a_database_error_returns_a_generic_message_and_an_error_log(self):
+		def bad_sql():
+			frappe.db.sql("select * from `tabNo Such Table`")
+
+		self.register("get_bad_sql_test", bad_sql)
+		before = set(frappe.get_all("Error Log", pluck="name"))
+		err, body = call("get_bad_sql_test")
+		created = set(frappe.get_all("Error Log", pluck="name")) - before
+		for name in created:
+			self.addCleanup(frappe.db.delete, "Error Log", {"name": name})
+		self.assertTrue(err)
+		self.assertNotIn("tabNo Such Table", json.dumps(body))
+		self.assertEqual(body["type"], "ProgrammingError")
+		match = re.fullmatch(re.escape(mcp.GENERIC_ERROR).replace(r"\{name\}", "(?P<name>.+)"), body["message"])
+		self.assertTrue(match, body["message"])
+		self.assertTrue(frappe.db.exists("Error Log", match["name"]))
+		self.assertIn("get_error_logs", body["suggestion"])
 
 	def test_failed_tool_rolls_back_its_writes(self):
 		err, body = call("get_boom_test")

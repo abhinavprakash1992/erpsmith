@@ -13,13 +13,16 @@ MAX_LIMIT = 200
 DROPPED_KEYS = {"flags", "owner", "creation"}
 
 
-def _clean(value):
-	"""Drop every DROPPED_KEYS key, at any depth (child rows have an owner too)."""
-	if isinstance(value, dict):
-		return {k: _clean(v) for k, v in value.items() if k not in DROPPED_KEYS}
-	if isinstance(value, list):
-		return [_clean(v) for v in value]
-	return value
+def _clean(meta, data):
+	"""Drop DROPPED_KEYS from the record and from its child rows. Other values (a JSON field's content) are left alone."""
+	data = {k: v for k, v in data.items() if k not in DROPPED_KEYS}
+	for df in meta.get_table_fields():
+		if isinstance(data.get(df.fieldname), list):
+			data[df.fieldname] = [
+				{k: v for k, v in row.items() if k not in DROPPED_KEYS} if isinstance(row, dict) else row
+				for row in data[df.fieldname]
+			]
+	return data
 
 
 def _new_rows(meta, data, own_rows=lambda fieldname: ()):
@@ -39,7 +42,8 @@ def _new_rows(meta, data, own_rows=lambda fieldname: ()):
 
 @tool("create_record")
 def create_record(doctype, data):
-	data = _new_rows(frappe.get_meta(doctype), _clean(data))
+	meta = frappe.get_meta(doctype)
+	data = _new_rows(meta, _clean(meta, data))
 	if frappe.is_table(doctype):
 		data.pop("name", None)  # a child row with a name would take over that row of another document
 	doc = frappe.client.insert({**data, "doctype": doctype})
@@ -58,7 +62,7 @@ def update_record(doctype, name, data):
 	# `data` has already edited, so it could forge what permission hooks read (owner, allocated_to).
 	doc.check_permission("write")
 	# doctype and name pick the record, they are not fields: letting them through retargets the save.
-	data = {k: v for k, v in _clean(data).items() if k not in ("doctype", "name")}
+	data = {k: v for k, v in _clean(doc.meta, data).items() if k not in ("doctype", "name")}
 	doc.update(_new_rows(doc.meta, data, lambda fieldname: {row.name for row in doc.get(fieldname)}))
 	doc.save()
 	if doc.get("parenttype"):

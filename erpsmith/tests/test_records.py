@@ -1,7 +1,11 @@
+import json
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from erpsmith.tests.helpers import approved, call, drop_doctype, forget_plans, run
+from erpsmith.tests.helpers import approved, call, drop_doctype, forget_plans, make_user, run
+
+GADGET = "ERPSmith Test Gadget"
 
 RESTRICTED = "mcp-restricted@example.com"
 VICTIM = "mcp-victim@example.com"
@@ -210,6 +214,40 @@ class TestRecords(FrappeTestCase):
 		row = frappe.db.get_value("ToDo", out["updated"], ["owner", "creation", "description"], as_dict=True)
 		self.assertEqual((row.owner, row.description), ("Administrator", "still mine"))
 		self.assertNotEqual(str(row.creation)[:4], "2001")
+
+
+class TestOwnerInsideJsonValue(FrappeTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.get_doc({"doctype": "DocType", "name": GADGET, "module": "Custom", "custom": 1, "autoname": "hash",
+			"fields": [{"fieldname": "payload", "label": "Payload", "fieldtype": "JSON"}],
+			"permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}]}).insert()
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		super().tearDownClass()
+		drop_doctype(GADGET)
+		forget_plans()
+
+	def test_owner_inside_a_json_field_value_is_kept(self):
+		payload = {"owner": "x", "creation": "y"}
+		err, out = run("create_record", {"doctype": GADGET, "data": {"payload": payload, "owner": VICTIM}})
+		self.assertFalse(err, out)
+		row = frappe.db.get_value(GADGET, out["name"], ["payload", "owner"], as_dict=True)
+		self.assertEqual(json.loads(row.payload), payload)
+		self.assertEqual(row.owner, "Administrator")
+
+	def test_a_child_rows_owner_is_still_dropped(self):
+		make_user(VICTIM)
+		args = {"doctype": "Notification Settings", "name": "Administrator",
+			"data": {"subscribed_documents": [{"document": "Event", "owner": VICTIM}]}}
+		err, out = run("update_record", args)
+		self.assertFalse(err, out)
+		owners = frappe.get_all("Notification Subscribed Document", filters={"parent": "Administrator"}, pluck="owner")
+		self.assertTrue(owners)
+		self.assertNotIn(VICTIM, owners)
 
 
 class TestCreateRecordDocstatus(FrappeTestCase):

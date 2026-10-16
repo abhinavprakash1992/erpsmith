@@ -55,9 +55,15 @@ def list_tools():
 	]
 
 
-def suggestion(e):
+# Errors whose text is meant for the user (ValueError is what tools raise for a bad argument value). Anything else (a database error names tables and SQL) is logged, not returned.
+USER_FACING = (frappe.ValidationError, frappe.PermissionError, InvalidArguments, guards.GateBlocked, guards.DangerousOp, TypeError, ValueError)
+
+
+def suggestion(e, logged=False):
 	"""What the client can do about error `e`, in descriptive voice (spec §9: behavioural guidance lives in instructions.md)."""
 	msg = str(e)
+	if logged:
+		return "get_error_logs shows the traceback of this error."
 	if msg.startswith("BLOCKED by plan gate"):
 		return ("Write tools run only after the user approves a plan: submit_plan, the plan shown to the user verbatim, "
 			"their explicit approval, then approve_plan. See RULE 10.")
@@ -96,12 +102,15 @@ def suggestion(e):
 	return "This is Frappe's own error message. get_error_logs lists recent server errors, and search_memory may hold a past fix."
 
 
+GENERIC_ERROR = "The server hit an unexpected error; it is recorded in Error Log {name}."
+
 PARTIAL = ("Some of this tool's changes may already be saved: it changed the database schema, which commits "
 	"immediately, so they could not be rolled back. get_doctype and list_fields show the current state.")
 
 
-def _error_result(e, partial=False):
-	body = {"error": True, "message": str(e) or type(e).__name__, "type": type(e).__name__, "suggestion": suggestion(e)}
+def _error_result(e, partial=False, log_name=None):
+	message = GENERIC_ERROR.format(name=log_name) if log_name else str(e) or type(e).__name__
+	body = {"error": True, "message": message, "type": type(e).__name__, "suggestion": suggestion(e, logged=bool(log_name))}
 	if partial:
 		body["partial"] = PARTIAL
 	return {"content": [{"type": "text", "text": json.dumps(body, indent=2)}], "isError": True}
@@ -143,7 +152,10 @@ def call_tool(name, args):
 		result = impl(**args)
 		text = json.dumps(result, indent=2, default=str)
 	except Exception as e:
-		return _error_result(e, partial=not undo_tool_writes())
+		partial = not undo_tool_writes()
+		# the rollback is done, so the Error Log row (it commits on its own) is not undone with the tool's writes
+		log_name = None if isinstance(e, USER_FACING) else frappe.log_error(title=f"ERPSmith tool {name} failed").name
+		return _error_result(e, partial=partial, log_name=log_name)
 	return {"content": [{"type": "text", "text": text}]}
 
 
