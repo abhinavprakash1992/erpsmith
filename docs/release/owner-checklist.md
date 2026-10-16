@@ -4,14 +4,14 @@ Everything in the repository is ready; these steps need your accounts or your de
 
 ## Before publishing
 
-- [ ] Confirm the repository address used throughout the docs, package metadata and User-Agent: `github.com/abhinavprakash1992/erpsmith` (change it everywhere if you pick another name or owner: README, PRIVACY.md, `pyproject.toml`, `erpsmith/knowledge.py`, listings, launch drafts).
-- [ ] Confirm the MCP address users enter in Claude: `https://<site>/api/method/erpsmith.mcp.handle`.
+- [x] Confirm the repository address used throughout the docs, package metadata and User-Agent: `github.com/abhinavprakash1992/erpsmith` (change it everywhere if you pick another name or owner: README, PRIVACY.md, `pyproject.toml`, `erpsmith/knowledge.py`, listings, launch drafts).
+- [x] Confirm the MCP address users enter in Claude: `https://<site>/api/method/erpsmith.mcp.handle`.
 - [ ] Skim the seed notes that were reworded from your vault (`private/seed-candidates.json`); decide on the 16 unverified candidates.
-- [ ] Create the public GitHub repository and push `plan-4-release` (merge to `main` first).
-- [ ] Watch the first CI run (`.github/workflows/ci.yml`) on both Frappe versions and fix what the real runner shows: Python 3.14 setup, Node 22/24, `bench init` and `get-app` from the checkout.
-- [ ] Run the end-to-end Claude connector test on the release candidate over a tunnel (the Plan 1 Task 7 steps): add the connector, complete OAuth, call tools, on a v15 site and a v16 site.
+- [x] Create the public GitHub repository and push `plan-4-release` (merge to `main` first).
+- [x] Watch the first CI run (`.github/workflows/ci.yml`) on both Frappe versions and fix what the real runner shows: Python 3.14 setup, Node 22/24, `bench init` and `get-app` from the checkout.
+- [x] Run the end-to-end Claude connector test on the release candidate over a tunnel (the Plan 1 Task 7 steps): add the connector, complete OAuth, call tools, on a v15 site and a v16 site.
 - [x] On a Frappe Cloud site: check that nginx serves `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` (spec risk 3). Passed 2026-10-16: both return JSON on a `*.m.frappe.cloud` v16 site, with dynamic client registration and PKCE S256 advertised.
-- [ ] Tag the release: `git tag v1.0.0` (the tag is local until you push it).
+- [x] Tag the release: `git tag v1.0.0` (the tag is local until you push it).
 
 ## Assets to make
 
