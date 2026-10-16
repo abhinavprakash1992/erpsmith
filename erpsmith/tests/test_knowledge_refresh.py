@@ -24,9 +24,11 @@ class TestRefresh(FrappeTestCase):
 	def setUp(self):
 		self.in_test = frappe.flags.in_test
 		frappe.flags.in_test = False  # the hook skips test runs; these tests turn it on
+		frappe.local.flags.pop("erpsmith_refresh_queued", None)
 		frappe.db.savepoint("refresh_test")
 
 	def tearDown(self):
+		frappe.local.flags.pop("erpsmith_refresh_queued", None)  # a savepoint rollback does not run after_rollback
 		frappe.flags.in_test = self.in_test
 		frappe.local.flags.pop(READ_ONLY_FLAG, None)
 		frappe.db.rollback(save_point="refresh_test")
@@ -36,7 +38,7 @@ class TestRefresh(FrappeTestCase):
 			doc = frappe.get_doc({"doctype": "Server Script", "name": "ERPSmith Test Refresh Script", "script_type": "DocType Event",
 				"reference_doctype": "ToDo", "doctype_event": "Before Save", "disabled": 1, "script": "pass"}).insert()
 			doc.delete()
-		self.assertGreaterEqual(len(builds(enqueue)), 2)  # the save and the delete
+		self.assertEqual(len(builds(enqueue)), 1)  # the save queues it; the delete in the same transaction adds nothing
 		for call in builds(enqueue):
 			self.assertEqual({k: call.kwargs[k] for k in (*JOB, "include_manual")}, {**JOB, "include_manual": False})
 
@@ -44,9 +46,19 @@ class TestRefresh(FrappeTestCase):
 		with patch("frappe.enqueue") as enqueue:
 			for n in range(100):
 				client_script(n)
-		self.assertEqual(len(builds(enqueue)), 100)
-		self.assertEqual({(c.kwargs["job_id"], c.kwargs["deduplicate"]) for c in builds(enqueue)},
-			{("erpsmith-knowledge-build", True)})  # Frappe drops the duplicates
+		# Frappe checks `deduplicate` when enqueue is called, not when the after-commit push runs, so 100 calls would be
+		# 100 pushes of the same job
+		self.assertEqual(len(builds(enqueue)), 1)
+		self.assertEqual(builds(enqueue)[0].kwargs["job_id"], "erpsmith-knowledge-build")
+
+	def test_a_commit_or_rollback_lets_the_next_save_queue_again(self):
+		for n, end in enumerate((frappe.db.after_commit, frappe.db.after_rollback)):
+			with patch("frappe.enqueue") as enqueue:
+				client_script(f"first {n}")
+				end.run()  # what a commit or a full rollback runs
+				client_script(f"second {n}")
+			self.assertEqual(len(builds(enqueue)), 2)
+			frappe.local.flags.pop("erpsmith_refresh_queued", None)
 
 	def test_no_build_is_queued_inside_call_method_read(self):
 		frappe.local.flags[READ_ONLY_FLAG] = True

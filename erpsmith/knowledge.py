@@ -285,14 +285,28 @@ REFRESH_DOCTYPES = ("Workflow", "Server Script", "Client Script", "Notification"
 	"Property Setter", "DocType", "Company", "Warehouse", "Currency")
 
 
+QUEUED_FLAG = "erpsmith_refresh_queued"
+
+
 def on_source_change(doc, method=None):
 	"""doc_events hook (hooks.py lists REFRESH_DOCTYPES): queue a build without the manual when a source record changes.
 	Not during call_method_read (it refuses queued jobs), install, migrate or a test run (the rest of the suite saves
-	scripts and commits schema changes). The job id deduplicates, so a bulk import queues one build."""
+	scripts and commits schema changes). A bulk import queues one build per transaction."""
 	# ponytail: a change committed while a build is already running waits for the next trigger. Add a "dirty" flag re-checked at the end of build() if that shows up in practice.
 	if frappe.local.flags.get(READ_ONLY_FLAG) or frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_test:
 		return
+	if frappe.local.flags.get(QUEUED_FLAG):
+		return
 	enqueue_build(include_manual=False)
+	# Frappe checks `deduplicate` when frappe.enqueue is called but pushes the job after commit, so every save in a
+	# transaction would push it again. One request per transaction; a commit or a full rollback allows the next.
+	frappe.local.flags[QUEUED_FLAG] = True
+	frappe.db.after_commit.add(_allow_next_refresh)
+	frappe.db.after_rollback.add(_allow_next_refresh)
+
+
+def _allow_next_refresh():
+	frappe.local.flags.pop(QUEUED_FLAG, None)
 
 
 MAX_RESULT_CHARS = 6000  # a big DocType (Sales Invoice) is about 15,000 characters; keep results cheap

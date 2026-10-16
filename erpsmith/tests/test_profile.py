@@ -35,6 +35,14 @@ class TestFormatters(FrappeTestCase):
 		for part in ("Default currency (Global Defaults): INR", "INR, USD", "used by Price Lists: USD"):
 			self.assertIn(part, cur)
 
+	def test_naming_series_keep_the_given_order_and_cap_the_list(self):
+		series = {f"ERPSmith Test Doc {i:02d}": [f"ETD{i}-.YYYY.-"] for i in range(45, 0, -1)}
+		text = profile.format_naming_series(series)
+		self.assertEqual(text.count("\n- "), 40)
+		self.assertIn("and 5 more", text)
+		self.assertLess(text.index("Doc 45"), text.index("Doc 06"))  # most rows first: the caller's order stands
+		self.assertNotIn("Doc 05", text)
+
 	def test_other_formatters_open_with_the_header(self):
 		for text in (profile.format_naming_series({"ERPSmith Test Doc": ["ETD-.YYYY.-"]}), profile.format_naming_series({}),
 				profile.format_apps([{"name": "frappe", "version": "15.0.0"}], {"frappe": ["Core"]}), profile.format_workflows([]),
@@ -68,6 +76,19 @@ class TestProfile(FrappeTestCase):
 	def tearDown(self):
 		frappe.db.rollback(save_point="profile_test")
 		frappe.clear_cache(doctype=GADGET)
+
+	def test_existence_is_by_doctype_record_so_single_doctypes_count(self):
+		self.assertTrue(profile._have("Currency"))
+		self.assertTrue(profile._have("System Settings"))  # a Single DocType has no table
+		self.assertFalse(profile._have("Company"))
+
+	def test_a_failing_note_is_logged_and_skipped(self):
+		with patch.object(profile, "_apps", side_effect=RuntimeError("boom")), patch("frappe.log_error") as log:
+			keys = [n["key"] for n in profile.profile_notes()]
+			counts = knowledge.build(include_manual=False, commit=False)
+		self.assertEqual(keys, [k for k in FRAPPE_ONLY if k != "apps"])
+		self.assertEqual(log.call_args.kwargs["title"], "ERPSmith: site profile note apps failed")
+		self.assertEqual(sum(counts["profile"].values()), len(FRAPPE_ONLY) - 1)
 
 	def test_a_site_without_erpnext_gets_only_the_frappe_notes(self):
 		self.assertEqual([n["key"] for n in profile.profile_notes()], FRAPPE_ONLY)
