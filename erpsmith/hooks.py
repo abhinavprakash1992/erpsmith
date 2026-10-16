@@ -29,4 +29,8 @@ doc_events = {
 	"Company": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},
 	"Warehouse": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},
 	"Currency": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},
+	"Fiscal Year": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},
+	"Global Defaults": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},
+	"Price List": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},
+	"Stock Settings": {"on_update": "erpsmith.knowledge.on_source_change", "on_trash": "erpsmith.knowledge.on_source_change"},
 }

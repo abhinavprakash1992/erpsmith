@@ -1,3 +1,5 @@
+import time
+
 from frappe.tests.utils import FrappeTestCase
 
 from erpsmith.scrub import scrub
@@ -23,6 +25,11 @@ SECRETS = [
 	('auth_token = "x9secret"', "x9secret"),
 	('frappe.db.set_value("Email Account", n, "password", "hunter2")', "hunter2"),
 	('doc.set("api_key", "abc123XYZ")', "abc123XYZ"),
+	('headers["Authorization"] = "token 3f2a9b8c7d6e5f4:1a2b3c4d5e6f7a8"', "3f2a9b8c7d6e5f4"),
+	("headers['X-API-KEY'] = 'k9f8e7d6c5b4a3'", "k9f8e7d6c5b4a3"),
+	('requests.post(url, auth=("api-user", "S3cure!Pass"))', "S3cure!Pass"),
+	('h = f"Authorization: token 3f2a9b8c7d6e5f4a:1a2b3c4d5e6f7a8b"', "3f2a9b8c7d6e5f4a"),
+	("k = \"-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQcYBF0abcdefg\n-----END PGP PRIVATE KEY BLOCK-----\"", "lQcYBF0abcdefg"),
 	("k = " + "sk-" + "a1B2c3D4e5F6g7H8i9J0k1L2", "a1B2c3D4e5F6g7H8i9J0k1L2"),
 	("k = " + "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8", "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"),
 	("k = xoxb-1234-5678-abcd", "1234-5678-abcd"),
@@ -65,6 +72,15 @@ class TestScrub(FrappeTestCase):
 	def test_benign_code_is_unchanged(self):
 		for source in BENIGN:
 			self.assertEqual(scrub(source), source)
+
+	def test_a_tuple_keeps_its_user_name(self):
+		self.assertEqual(scrub('auth=("api-user", "S3cure!Pass")'), 'auth=("api-user", "[redacted]")')
+
+	def test_long_inputs_stay_fast(self):
+		for text in ("a" * 50000, '"' + "ab1" * 20000 + '"', "pass" * 500, "password" * 5000, "auth_" * 8000, "token " + "a" * 20000):
+			start = time.monotonic()
+			scrub(text)
+			self.assertLess(time.monotonic() - start, 1, text[:12])
 
 	def test_empty_input(self):
 		self.assertEqual((scrub(None), scrub("")), ("", ""))

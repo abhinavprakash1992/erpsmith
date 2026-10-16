@@ -78,7 +78,7 @@ def _workflow_chunks():
 	moves = _children("Workflow Transition", "Workflow", ["state", "action", "next_state", "allowed", "condition"])
 	for w in _rows("Workflow", WORKFLOW):
 		state_lines = [f"- {s.state} (docstatus {s.doc_status or 0}; edited by {s.allow_edit or 'nobody'}"
-			+ (f"; sets {s.update_field} = {s.update_value}" if s.update_field else "") + ")" for s in states[w.name]]
+			+ (f"; sets {s.update_field} = {scrub(s.update_value)}" if s.update_field else "") + ")" for s in states[w.name]]
 		move_lines = [f"{t.state} --{t.action} ({t.allowed}{', ' + scrub(t.condition) if t.condition else ''})--> {t.next_state}"
 			for t in moves[w.name]]
 		active = "active" if w.is_active else "inactive"
@@ -147,29 +147,59 @@ def _print_format_chunks():
 		yield _chunk("Print Format", p.name, summary, content)
 
 
+def _guarded(doctype, build):
+	"""build() for one source DocType; a failure (one bad row) is logged and costs only that source."""
+	try:
+		return build()
+	except Exception:
+		frappe.log_error(title=f"ERPSmith: customization chunks for {doctype} failed")
+		return None
+
+
 def customization_chunks():
 	"""One chunk per workflow, server script, client script, custom notification and custom print format on this site."""
-	return [c for source in (_workflow_chunks, _server_script_chunks, _client_script_chunks, _notification_chunks,
-		_print_format_chunks) for c in source()]
+	chunks = []
+	for doctype, source in (("Workflow", _workflow_chunks), ("Server Script", _server_script_chunks),
+			("Client Script", _client_script_chunks), ("Notification", _notification_chunks), ("Print Format", _print_format_chunks)):
+		chunks += _guarded(doctype, lambda: list(source())) or []
+	return chunks
+
+
+def _attach_workflows(parts):
+	for w in _rows("Workflow", WORKFLOW):
+		parts[w.document_type]["Workflow"].append(f'"{w.name}" ({"active" if w.is_active else "inactive"})')
+
+
+def _attach_server_scripts(parts):
+	for s in _rows("Server Script", SERVER_SCRIPT[:4] + ["disabled"]):
+		if s.reference_doctype:
+			parts[s.reference_doctype]["Server Scripts"].append(
+				f"{s.name} ({', '.join(filter(None, [s.doctype_event or s.script_type, s.disabled and 'disabled']))})")
+
+
+def _attach_client_scripts(parts):
+	for c in _rows("Client Script", ["name", "dt", "view", "enabled"]):
+		parts[c.dt]["Client Scripts"].append(f"{c.name} ({', '.join(filter(None, [c.view, not c.enabled and 'disabled']))})")
+
+
+def _attach_notifications(parts):
+	for n in _notifications():
+		parts[n.document_type]["Notifications"].append(f"{n.name} ({', '.join(filter(None, [n.event, not n.enabled and 'disabled']))})")
+
+
+def _attach_print_formats(parts):
+	defaults = _default_formats()
+	for p in _print_formats():
+		flags = ", ".join(f for f, on in (("default", (p.doc_type, p.name) in defaults), ("disabled", p.disabled)) if on)
+		parts[p.doc_type]["Print Formats"].append(f"{p.name} ({flags})" if flags else p.name)
 
 
 def attachments():
 	"""{DocType: 'Customizations: …'}, the one line a DocType chunk shows of what is attached to it."""
 	parts = defaultdict(lambda: defaultdict(list))  # DocType -> section -> entries
-	for w in _rows("Workflow", WORKFLOW):
-		parts[w.document_type]["Workflow"].append(f'"{w.name}" ({"active" if w.is_active else "inactive"})')
-	for s in _rows("Server Script", SERVER_SCRIPT[:4] + ["disabled"]):
-		if s.reference_doctype:
-			parts[s.reference_doctype]["Server Scripts"].append(
-				f"{s.name} ({', '.join(filter(None, [s.doctype_event or s.script_type, s.disabled and 'disabled']))})")
-	for c in _rows("Client Script", ["name", "dt", "view", "enabled"]):
-		parts[c.dt]["Client Scripts"].append(f"{c.name} ({', '.join(filter(None, [c.view, not c.enabled and 'disabled']))})")
-	for n in _notifications():
-		parts[n.document_type]["Notifications"].append(f"{n.name} ({', '.join(filter(None, [n.event, not n.enabled and 'disabled']))})")
-	defaults = _default_formats()
-	for p in _print_formats():
-		flags = ", ".join(f for f, on in (("default", (p.doc_type, p.name) in defaults), ("disabled", p.disabled)) if on)
-		parts[p.doc_type]["Print Formats"].append(f"{p.name} ({flags})" if flags else p.name)
+	for doctype, attach in (("Workflow", _attach_workflows), ("Server Script", _attach_server_scripts),
+			("Client Script", _attach_client_scripts), ("Notification", _attach_notifications), ("Print Format", _attach_print_formats)):
+		_guarded(doctype, lambda: attach(parts))
 	return {dt: "Customizations: " + "; ".join(
 		"; ".join(f"Workflow {w}" for w in items) if section == "Workflow" else f"{section}: {', '.join(items)}"
 		for section, items in sections.items()) for dt, sections in parts.items()}

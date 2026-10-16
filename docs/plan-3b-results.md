@@ -3,7 +3,7 @@
 ## Outcome
 - Tests: 372 on Frappe 15.123.1 and 372 on 16.52.0, all OK (`dev/test.sh`, 2026-10-16). Plan 3 ended at 338; Plan 3b adds the scrubber, customization chunks, ranking, refresh hook and profile tests.
 - `search_erpnext_knowledge` gains the `kind` value `"customization"`; no tool name or argument changed.
-- Knowledge index now holds, besides DocType and manual chunks: one chunk per Workflow, Server Script, Client Script, custom Notification and custom Print Format (secrets scrubbed from script code, no notification bodies or recipient addresses, no print format HTML). Seven generated profile notes live in MCP Memory (`profile__<key>`, topic `context`).
+- Knowledge index now holds, besides DocType and manual chunks: one chunk per Workflow, Server Script, Client Script, custom Notification and custom Print Format (secrets scrubbed from script code, no notification bodies or recipient addresses, no print format HTML). Generated profile notes (`profile__<key>`, topic `context`; seven on an ERPNext site, five on the Frappe-only dev sites) live in MCP Memory.
 
 ## Retrieval probes (`dev/probe_knowledge.py`, fixtures created and removed by the probe)
 Fixtures: a submittable test DocType, a Workflow whose transition is allowed for the role `ERPSmith Test Approver`, two After Submit Server Scripts. Afterwards no test DocType, table, role, workflow or script remains on either site.
@@ -47,6 +47,7 @@ The first probe run put `profile__footprint` ahead of `profile__apps` for "which
 - A profile note whose gatherer raises is logged and skipped instead of failing the build after the chunks were committed.
 
 ## For Plan 4
+- A refresh build (no manual) shares its `job_id` with the full build. While a refresh waits or runs, a migrate's full build is dropped as a duplicate and the manual is not fetched. Give the refresh its own `job_id`, or let a full request replace a waiting refresh.
 - README onboarding prompt (addendum §4).
 - PRIVACY.md sentence about the index and the profile notes (addendum §5).
 - Live ERPNext profile check (Decision 7): confirm the field names the formatters read (Company abbr, country, default_currency, parent_company; Warehouse is_group, parent_warehouse; Stock Settings default_warehouse, valuation_method; Global Defaults default_currency; Price List currency; Fiscal Year dates) on a real ERPNext site.

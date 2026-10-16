@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 import frappe
@@ -131,6 +132,18 @@ class TestProfile(FrappeTestCase):
 		is_error, out = call("search_memory", {"query": "which apps are installed on this site", "topic": "context"})
 		self.assertFalse(is_error)
 		self.assertIn("profile__apps", [r["id"] for r in out["results"][:3]])
+
+	def test_standard_records_are_not_counted_as_customizations(self):
+		def custom_print_formats():
+			return int(re.search(r"(\d+) custom print formats", profile._footprint()).group(1))
+
+		before = custom_print_formats()
+		name = frappe.get_doc({"doctype": "Print Format", "name": "ERPSmith Test Profile Format", "doc_type": "ToDo", "standard": "No",
+			"custom_format": 1, "print_format_type": "Jinja", "html": "<p>x</p>"}).insert().name
+		self.assertEqual(custom_print_formats(), before + 1)
+		# flipped after insert: inserting a standard record on a developer-mode site would export files into an app folder
+		frappe.db.set_value("Print Format", name, "standard", "Yes")
+		self.assertEqual(custom_print_formats(), before)
 
 	def test_seed_files_cannot_use_profile_keys(self):
 		with self.assertRaisesRegex(ValueError, "profile-"):

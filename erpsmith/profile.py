@@ -174,9 +174,9 @@ def _workflows():
 
 def _footprint():
 	"""Workflows have their own note and are left out of the counts, so adding one changes one note."""
-	counts = {label: frappe.db.count(dt) for label, dt in (("custom fields", "Custom Field"), ("property setters", "Property Setter"),
-		("server scripts", "Server Script"), ("client scripts", "Client Script"), ("notifications", "Notification"),
-		("custom print formats", "Print Format")) if _have(dt)}
+	counts = {label: frappe.db.count(dt, filters) for label, dt, filters in (("custom fields", "Custom Field", None),
+		("property setters", "Property Setter", None), ("server scripts", "Server Script", None), ("client scripts", "Client Script", None),
+		("notifications", "Notification", {"is_standard": 0}), ("custom print formats", "Print Format", {"standard": "No"})) if _have(dt)}
 	per_doctype = {}
 	for dt in frappe.get_all("Custom Field", pluck="dt") + frappe.get_all("Property Setter", pluck="doc_type"):
 		per_doctype[dt] = per_doctype.get(dt, 0) + 1

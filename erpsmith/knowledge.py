@@ -282,7 +282,7 @@ def enqueue_build(include_manual=True):
 
 
 REFRESH_DOCTYPES = ("Workflow", "Server Script", "Client Script", "Notification", "Print Format", "Custom Field",
-	"Property Setter", "DocType", "Company", "Warehouse", "Currency")
+	"Property Setter", "DocType", "Company", "Warehouse", "Currency", "Fiscal Year", "Global Defaults", "Price List", "Stock Settings")
 
 
 QUEUED_FLAG = "erpsmith_refresh_queued"

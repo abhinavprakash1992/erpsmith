@@ -189,3 +189,25 @@ class TestCustomization(FrappeTestCase):
 		self.assertTrue(len(chunks) >= 5)
 		for chunk in chunks:
 			self.assertNotIn("directive", seed_rules.hard_violations(chunk["summary"]), chunk["chunk_key"])
+
+	def test_one_failing_source_does_not_stop_the_others(self):
+		self.server_script("Event")
+		self.client_script()
+		with patch.object(customization, "_client_script_chunks", side_effect=RuntimeError("bad row")), \
+				patch.object(customization, "_attach_notifications", side_effect=RuntimeError("bad row")), \
+				patch("erpsmith.customization.frappe.log_error") as log:
+			keys = set(keyed(customization.customization_chunks()))
+			line = customization.attachments()[GADGET]
+		self.assertIn(f"customization::Server Script::{PREFIX} Event", keys)
+		self.assertIn(f"customization::Workflow::{WORKFLOW}", keys)
+		self.assertFalse(any(k.startswith("customization::Client Script::") for k in keys))
+		self.assertIn("Server Scripts:", line)
+		self.assertEqual(sorted(c.kwargs["title"] for c in log.call_args_list), [
+			"ERPSmith: customization chunks for Client Script failed", "ERPSmith: customization chunks for Notification failed"])
+
+	def test_a_workflow_state_update_value_is_scrubbed(self):
+		frappe.db.set_value("Workflow Document State", {"parent": WORKFLOW, "state": "Pending"},
+			{"update_field": "title", "update_value": 'api_key = "' + SECRET + '"'})
+		content = keyed(customization.customization_chunks())[f"customization::Workflow::{WORKFLOW}"]["content"]
+		self.assertIn("sets title", content)
+		self.assertNotIn(SECRET, content)
