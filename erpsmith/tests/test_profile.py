@@ -36,6 +36,22 @@ class TestFormatters(FrappeTestCase):
 		for part in ("Default currency (Global Defaults): INR", "INR, USD", "used by Price Lists: USD"):
 			self.assertIn(part, cur)
 
+	def test_the_default_warehouse_comes_from_the_company_when_stock_settings_has_none(self):
+		"""v16 dropped Stock Settings.default_warehouse for Company.default_warehouse (found by the ERPNext smoke); a Frappe-only site
+		has neither DocType, so the gatherer's reads are patched."""
+		def get_meta(doctype):
+			return frappe._dict(has_field=lambda field: doctype == "Company")
+
+		def get_all(doctype, **kw):
+			if doctype == "Company":
+				return [frappe._dict(name="ERPSmith Test Co", default_warehouse="ERPSmith Test Stores - ETC")]
+			return ["ERPSmith Test Stores"] if kw["filters"] == {"is_group": 1} else []  # the group warehouses, then their children
+
+		with patch.object(profile, "_have", return_value=True), patch("frappe.get_meta", get_meta), patch("frappe.get_all", get_all), \
+				patch("frappe.db.get_single_value", return_value="FIFO"):
+			text = profile._warehouses()
+		self.assertIn("Default warehouse: ERPSmith Test Stores - ETC.", text)
+
 	def test_naming_series_keep_the_given_order_and_cap_the_list(self):
 		series = {f"ERPSmith Test Doc {i:02d}": [f"ETD{i}-.YYYY.-"] for i in range(45, 0, -1)}
 		text = profile.format_naming_series(series)

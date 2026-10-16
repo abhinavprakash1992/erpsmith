@@ -115,8 +115,12 @@ def _warehouses():
 		children[parent] = children.get(parent, 0) + 1
 	default = valuation = None
 	if _have("Stock Settings"):
-		default = frappe.db.get_single_value("Stock Settings", "default_warehouse")
 		valuation = frappe.db.get_single_value("Stock Settings", "valuation_method")
+		if frappe.get_meta("Stock Settings").has_field("default_warehouse"):  # v15: one for the site
+			default = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+	if not default and frappe.get_meta("Company").has_field("default_warehouse"):  # v16 moved it to the Company
+		rows = frappe.get_all("Company", filters={"default_warehouse": ["is", "set"]}, fields=["name", "default_warehouse"], order_by="name asc")
+		default = ", ".join(r.default_warehouse if len(rows) == 1 else f"{r.default_warehouse} ({r.name})" for r in rows[:COMPANIES_SHOWN]) or None
 	return format_warehouses([{"name": g, "children": children.get(g, 0)} for g in groups], default, valuation)
 
 
