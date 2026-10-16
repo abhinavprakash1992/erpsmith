@@ -723,7 +723,7 @@
   {
     "name": "call_method_read",
     "title": "Call Method (Read Only)",
-    "description": "Calls a whitelisted Frappe or ERPNext Python method, the same methods the REST API serves at /api/method/<dotted.path> (https://docs.frappe.io/framework/user/en/api/server-calls), as the signed-in user, and rolls back every database change it makes; a method that commits is refused. Use to read data no other tool returns, e.g. frappe.client.get_count. Emails or HTTP calls a method sends itself are not undone.",
+    "description": "Calls a whitelisted Frappe or ERPNext Python method, the same methods the REST API serves at /api/method/<dotted.path> (https://docs.frappe.io/framework/user/en/api/server-calls), as the signed-in user, and rolls back every database change it makes; a method that commits or queues a background job is refused, and rolledBack is false if the database could not be fully rolled back. Use to read data no other tool returns, e.g. frappe.client.get_count. Emails or HTTP calls a method sends itself are not undone.",
     "inputSchema": {
       "type": "object",
       "required": ["method"],

@@ -1,15 +1,39 @@
 """call_method and call_method_read: the whitelisted Python methods /api/method/<dotted.path> serves, called in-process.
 
 call_method_read is read-only by construction for Frappe's own commit paths: it runs in a savepoint that is always
-rolled back, and a commit inside the method (frappe.db.commit, or a schema change through frappe.db.sql_ddl) is refused.
+rolled back, a commit inside the method (frappe.db.commit, or a schema change through frappe.db.sql_ddl) is refused,
+and so is queueing a background job (the job would run after the rollback, on committed data).
 """
 
 import frappe
 from frappe.model.document import Document
+from frappe.utils import background_jobs
 
 from erpsmith.registry import InvalidArguments, required_text, tool
 
 READ_SAVEPOINT = "mcp_read"
+READ_ONLY_FLAG = "erpsmith_read_only"
+
+
+def _install_queue_guard():
+	"""Every queued job (frappe.enqueue, enqueue_doc, enqueue_after_commit) asks background_jobs.get_queue for its queue
+	first, so refusing there stops them all. The wrapper stays installed and checks a flag on frappe.local, so another
+	request in the same process is never affected; installing twice (module reload) keeps the one wrapper."""
+	current = background_jobs.get_queue
+	if getattr(current, "erpsmith_guard", False):
+		return
+
+	def get_queue(*args, **kwargs):
+		if frappe.local.flags.get(READ_ONLY_FLAG):
+			raise frappe.ValidationError("call_method_read cannot run a method that queues a background job, because the job "
+				"would run after the rollback; call_method runs it.")
+		return current(*args, **kwargs)
+
+	get_queue.erpsmith_guard = True
+	background_jobs.get_queue = get_queue
+
+
+_install_queue_guard()
 
 
 def _resolve(method):
@@ -60,9 +84,12 @@ def call_method_read(method, args=None):
 
 	frappe.db.savepoint(READ_SAVEPOINT)
 	frappe.db.before_commit.add(_refuse_commit)
+	was_read_only = frappe.local.flags.get(READ_ONLY_FLAG)
+	frappe.local.flags[READ_ONLY_FLAG] = True
 	try:
 		result = _call(method, args)
 	finally:
+		frappe.local.flags[READ_ONLY_FLAG] = was_read_only
 		# also drops _refuse_commit and whatever the method queued for a commit
 		rolled_back = mcp.undo_tool_writes(READ_SAVEPOINT)  # False: the savepoint was lost, a commit outside Frappe's paths may persist
 	return {"method": method, "result": result, "rolledBack": rolled_back}

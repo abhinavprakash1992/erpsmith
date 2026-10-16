@@ -72,7 +72,7 @@ def suggestion(e):
 	if "not whitelisted" in msg:
 		return "Only whitelisted methods can be called, and the dotted path may be wrong."
 	if msg.startswith("The script would fail in Frappe's sandbox"):
-		return "Each listed line names a replacement that runs in the sandbox. See RULE 1."
+		return "Each listed line says what the sandbox rejects, with a working replacement where there is one. See RULE 1."
 	if isinstance(e, InvalidArguments):
 		return "An argument is missing or out of range; the tool's input schema in tools/list shows what it takes."
 	if isinstance(e, frappe.PermissionError):

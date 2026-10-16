@@ -271,7 +271,7 @@ class TestDangerousOps(FrappeTestCase):
 		with self.assertRaisesRegex(DangerousOp, "11 records"):
 			guards.check_dangerous_op("call_method", items(11))
 		guards.check_dangerous_op("call_method", items(10))
-		guards.check_dangerous_op("call_method_read", items(11))  # rolled back, so nothing to block
+		guards.check_dangerous_op("call_method_read", items(11))  # the guard checks call_method only; call_method_read refuses background jobs
 
 	def test_unusual_argument_shapes_do_not_crash_the_guard(self):
 		for args in ({"method": "frappe.client.set_value", "args": "x"}, {"method": "frappe.client.set_value", "args": None},
