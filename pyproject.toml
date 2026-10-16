@@ -1,7 +1,7 @@
 [project]
 name = "erpsmith"
 authors = [{ name = "Abhinav Prakash", email = "abhinav.prakash1992@gmail.com" }]
-description = "ERPNext developer copilot over MCP: build, debug and fix customizations behind a plan gate, with semantic memory"
+description = "Developer copilot for ERPNext over MCP: build, debug and fix customizations behind a plan gate, with semantic memory"
 requires-python = ">=3.11"
 readme = "README.md"
 license = "MIT"

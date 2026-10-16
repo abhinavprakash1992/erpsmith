@@ -12,7 +12,7 @@ It is for developers, implementers and administrators who customize ERPNext site
 
 ## Install
 
-On a bench (Frappe v15 or v16):
+On a bench (Frappe v15 or v16; the app requires Python 3.11 or newer):
 
 ```bash
 bench get-app https://github.com/abhinavprakash1992/erpsmith
@@ -36,7 +36,7 @@ Create a user such as `ai@your-company.example` that has only the roles the assi
 
 ## The plan gate
 
-Every tool that changes something is rejected until a plan covering it has been submitted, shown to you and approved. The assistant calls `submit_plan` with the exact changes it intends (tool, arguments, reason), you read the plan in Claude and say yes, and the assistant then calls `approve_plan` as you. Approval lasts 15 minutes by default (up to 24 hours). Each change must match a plan entry exactly and can be used once. You can only approve your own plans. Plans are listed read-only in Desk (MCP Plan) as an audit trail, kept for 7 days after they can no longer unlock anything and then pruned by a daily scheduled job. Read-only tools, the plan tools and the three tools that write memory notes (`add_memory`, `update_memory`, `delete_memory`) are not gated. A few operations are blocked even with an approved plan: changing a User's roles (including the Has Role rows behind them), password or API keys, generating API keys, deleting records of protected DocTypes such as User or Company, and deleting more than 10 records in one call.
+Every tool that changes something is rejected until a plan covering it has been submitted, shown to you and approved. The assistant calls `submit_plan` with the exact changes it intends (tool, arguments, reason), you read the plan in Claude and say yes, and the assistant then calls `approve_plan` as you. Approval lasts 15 minutes by default (up to 24 hours). Each change must match a plan entry exactly and can be used once. You can only approve your own plans. Plans are listed read-only in Desk (MCP Plan) as an audit trail, deleted by a daily scheduled job once they are more than 7 days old and can no longer unlock anything. Read-only tools, the plan tools and the three tools that write memory notes (`add_memory`, `update_memory`, `delete_memory`) are not gated. A few operations are blocked even with an approved plan: changing a User's roles (including the Has Role rows behind them), password or API keys, generating API keys, deleting records of protected DocTypes such as User or Company, and deleting more than 10 records in one call.
 
 ## Memory, knowledge and the site profile
 
@@ -60,7 +60,7 @@ Use ERPSmith to learn how my company works.
 
 Saved answers are ordinary memory notes; edit them in Desk or with `update_memory`. Third-person facts keep the notes descriptive.
 
-## Privacy
+## Privacy Policy
 
 Everything ERPSmith stores lives in your site's own database. It has no telemetry and no hosted service. Tool results go to the model provider behind the MCP client you use, as with any tool; the only other network call is the public ERPNext manual fetch from docs.erpnext.com. Plans keep their arguments in plaintext as an audit trail and are pruned once they are more than 7 days old and can no longer unlock anything (a daily job, so the scheduler has to be running). DocType metadata is readable by any signed-in user through `get_doctype` and the debug tools, as it is through Frappe's own desk. Read [PRIVACY.md](PRIVACY.md) for the full policy.
 
