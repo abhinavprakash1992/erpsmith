@@ -9,7 +9,7 @@ try:
 except ImportError:  # v16
 	check_parent_permission = None
 
-from erpsmith.registry import tool
+from erpsmith.registry import InvalidArguments, tool
 
 MAX_LIMIT = 200
 
@@ -21,6 +21,8 @@ DROPPED_KEYS = {"flags", "owner", "creation"}
 
 def _clean(meta, data):
 	"""Drop DROPPED_KEYS from the record and from its child rows. Other values (a JSON field's content) are left alone."""
+	if not isinstance(data, dict):
+		raise InvalidArguments("data must be an object")
 	data = {k: v for k, v in data.items() if k not in DROPPED_KEYS}
 	for df in meta.get_table_fields():
 		if isinstance(data.get(df.fieldname), list):

@@ -260,6 +260,11 @@ class TestDangerousOps(FrappeTestCase):
 		guards.check_dangerous_op("call_method", cm("frappe.client.set_value", doctype="User", name="x", fieldname="first_name", value="A"))
 		guards.check_dangerous_op("call_method", cm("frappe.client.save", doc={"doctype": "User", "first_name": "A"}))
 
+	def test_list_view_delete_of_a_protected_doctype_is_blocked(self):
+		args = {"method": "frappe.desk.reportview.delete_items", "args": {"doctype": "User", "items": json.dumps(["x"])}}
+		with self.assertRaisesRegex(DangerousOp, "User"):
+			guards.check_dangerous_op("call_method", args)
+
 	def test_core_doctypes_cannot_be_deleted(self):
 		with self.assertRaisesRegex(DangerousOp, "Company"):
 			guards.check_dangerous_op("delete_record", {"doctype": "Company", "name": "X"})
@@ -322,6 +327,9 @@ class TestPruning(FrappeTestCase):
 		self.assertEqual(frappe.get_all("MCP Plan", filters={"owner": "Administrator"}, pluck="name"), [fresh])
 		self.assertEqual(frappe.db.count("MCP Plan Change", {"parent": ("in", [consumed, expired, pending])}), 0)
 		self.assertIn("erpsmith.guards.prune_plans", frappe.get_hooks("scheduler_events")["daily"])
+
+	def test_pruning_with_no_old_plans_returns_zero(self):
+		self.assertEqual(guards.prune_plans(), 0)
 
 	def test_an_old_plan_with_an_unused_live_change_is_kept(self):
 		old_but_live = plan(("update_record", upd("DN-PL", "p")))

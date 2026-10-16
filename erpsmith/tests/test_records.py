@@ -239,6 +239,13 @@ class TestOwnerInsideJsonValue(FrappeTestCase):
 		self.assertEqual(json.loads(row.payload), payload)
 		self.assertEqual(row.owner, "Administrator")
 
+	def test_data_that_is_not_an_object_is_an_invalid_argument(self):
+		err, out = run("create_record", {"doctype": GADGET, "data": ["owner"]})
+		self.assertEqual((err, out["type"], out["message"]), (True, "InvalidArguments", "data must be an object"))
+		todo = frappe.get_doc({"doctype": "ToDo", "description": "list data"}).insert()
+		err, out = run("update_record", {"doctype": "ToDo", "name": todo.name, "data": ["owner"]})
+		self.assertEqual((err, out["type"]), (True, "InvalidArguments"))
+
 	def test_a_child_rows_owner_is_still_dropped(self):
 		make_user(VICTIM)
 		args = {"doctype": "Notification Settings", "name": "Administrator",

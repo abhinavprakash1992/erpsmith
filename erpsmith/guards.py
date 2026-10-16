@@ -118,6 +118,8 @@ def prune_plans(days=PLAN_RETENTION_DAYS):
 	approved. Returns how many. Runs daily (hooks.scheduler_events)."""
 	old = frappe.get_all("MCP Plan", filters={"creation": ("<", add_to_date(now_datetime(), days=-days))},
 		fields=["name", "status", "expires_at"])
+	if not old:
+		return 0
 	has_unused = set(frappe.get_all("MCP Plan Change", filters={"parent": ("in", [p.name for p in old]), "consumed": 0}, pluck="parent"))
 	dead = [p.name for p in old if p.status != "Approved" or _status(p.status, p.expires_at) == "expired" or p.name not in has_unused]
 	for name in dead:
@@ -240,7 +242,7 @@ def check_dangerous_op(tool, args):
 			f"DANGEROUS OP BLOCKED — Bulk delete of {len(bulk)} records in one call.\n"
 			"Max 10 per call. Split into batches and get approval for each batch. See RULE 16."
 		)
-	if method == "frappe.client.delete":
+	if method in ("frappe.client.delete", "frappe.desk.reportview.delete_items"):
 		_check_protected_delete(margs.get("doctype"))
 	if method in ("frappe.client.save", "frappe.client.insert"):
 		doc = _json_value(margs.get("doc"))  # the client methods take the document as a JSON string too
