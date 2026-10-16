@@ -127,7 +127,9 @@ def _warehouses():
 def _tables_with_rows():
 	"""DocTypes whose table holds at least one row. Exact (one EXISTS per table, which reads a single index entry), because
 	InnoDB's information_schema row estimates drift between builds and would rewrite and re-embed the notes every time."""
-	names = frappe.get_all("DocType", filters={"issingle": 0, "is_virtual": 0}, pluck="name")
+	# ERPSmith's own DocTypes are left out: the profile notes live in MCP Memory, so counting it would make writing
+	# the notes change the apps note on a site whose ERPSmith tables start empty
+	names = frappe.get_all("DocType", filters={"issingle": 0, "is_virtual": 0, "module": ["!=", "ERPSmith"]}, pluck="name")
 	held = set()
 	for name in names:
 		try:

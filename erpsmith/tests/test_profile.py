@@ -174,3 +174,20 @@ class TestTablesWithRows(FrappeTestCase):
 		frappe.get_doc({"doctype": "Note", "title": "ERPSmith Test Rows"}).insert()
 		self.assertIn("Note", profile._tables_with_rows())
 		self.assertIn("DocType", before)
+
+
+class TestProfileDoesNotDescribeItself(FrappeTestCase):
+	def test_writing_the_notes_does_not_change_them(self):
+		# On a fresh site the app's own tables start empty; writing the profile notes into MCP Memory must not
+		# then change the apps note (seen in the first CI run, hidden on dev benches whose knowledge table is full)
+		frappe.db.savepoint("self_test")
+		try:
+			from erpsmith.tests.helpers import empty_knowledge_table
+			empty_memory_table()
+			empty_knowledge_table()
+			for dt in ("MCP Plan Change", "MCP Plan"):
+				frappe.db.delete(dt)
+			profile.sync_profile(profile.profile_notes())
+			self.assertEqual(profile.sync_profile(profile.profile_notes())["updated"], 0)
+		finally:
+			frappe.db.rollback(save_point="self_test")
