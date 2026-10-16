@@ -10,6 +10,19 @@ SECRETS = [
 	("client_secret: 'cs_live_9'", "cs_live_9"),
 	('webhook_url = "https://x"', "https://x"),
 	('h = "Basic dXNlcjpwYXNz"', "dXNlcjpwYXNz"),
+	('password = """hunter2"""', "hunter2"),
+	("password = \'\'\'hunter2\'\'\'", "hunter2"),
+	('password = """line1\nhunter2"""', "hunter2"),
+	('password = "a\\"b-hunter2"', "hunter2"),
+	("password = 'it\\'s-hunter2'", "hunter2"),
+	('token = b"hunter2"', "hunter2"),
+	('secret = r"hunter2"', "hunter2"),
+	('password = f"hunter2{x}"', "hunter2"),
+	('password = rb"hunter2"', "hunter2"),
+	('auth = "x9secret"', "x9secret"),
+	('auth_token = "x9secret"', "x9secret"),
+	('frappe.db.set_value("Email Account", n, "password", "hunter2")', "hunter2"),
+	('doc.set("api_key", "abc123XYZ")', "abc123XYZ"),
 	("k = " + "sk-" + "a1B2c3D4e5F6g7H8i9J0k1L2", "a1B2c3D4e5F6g7H8i9J0k1L2"),
 	("k = " + "ghp_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8", "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8"),
 	("k = xoxb-1234-5678-abcd", "1234-5678-abcd"),
@@ -26,8 +39,17 @@ BENIGN = [
 	'x = "a1b2c3"',
 	'msg = "Please contact the accounts team about the overdue invoice"',
 	'frappe.throw("Token expired")',
+	'frappe.throw("Basic authentication failed")',
+	'msg = "Bearer token is required"',
+	'msg = "Basic information"',
+	'doc.author = "John Smith"',
+	'author_name = "Jane"',
 	'total = doc.grand_total\nif total > 1000:\n\tdoc.status = "Review"',
 ]
+
+
+def _row(text):
+	return next(source for source, _ in SECRETS if text in source)
 
 
 class TestScrub(FrappeTestCase):
@@ -36,8 +58,8 @@ class TestScrub(FrappeTestCase):
 			out = scrub(source)
 			self.assertNotIn(secret, out, source)
 			self.assertTrue("[redacted]" in out or "[data URI]" in out, source)
-		self.assertIn("https://[redacted]@api.example.com/x", scrub(SECRETS[12][0]))
-		self.assertIn('"[data URI]"', scrub(SECRETS[14][0]))
+		self.assertIn("https://[redacted]@api.example.com/x", scrub(_row("requests.get")))
+		self.assertIn('"[data URI]"', scrub(_row("data:image")))
 		self.assertNotIn("BEGIN", scrub(PEM))
 
 	def test_benign_code_is_unchanged(self):

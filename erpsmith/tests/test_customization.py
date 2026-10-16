@@ -28,6 +28,7 @@ class TestCustomization(FrappeTestCase):
 			"fields": [{"fieldname": "title", "label": "Title", "fieldtype": "Data"},
 				{"fieldname": "amount", "label": "Amount", "fieldtype": "Currency"}],
 			"permissions": [{"role": "System Manager", "read": 1, "write": 1, "create": 1}]}).insert()
+		cls.addClassCleanup(drop_doctype, GADGET)  # runs even when the Workflow insert below fails
 		frappe.get_doc({"doctype": "Workflow", "workflow_name": WORKFLOW, "document_type": GADGET, "workflow_state_field": "workflow_state",
 			"is_active": 1, "states": [{"state": "Pending", "doc_status": "0", "allow_edit": "System Manager"},
 				{"state": "Approved", "doc_status": "0", "allow_edit": "System Manager"}],
@@ -39,7 +40,6 @@ class TestCustomization(FrappeTestCase):
 		super().tearDownClass()
 		if frappe.db.exists("Workflow", WORKFLOW):
 			frappe.delete_doc("Workflow", WORKFLOW, force=True)
-		drop_doctype(GADGET)
 
 	def setUp(self):
 		frappe.db.savepoint("customization_test")
@@ -185,7 +185,7 @@ class TestCustomization(FrappeTestCase):
 		self.client_script()
 		self.notification()
 		self.print_format()
-		chunks = customization.customization_chunks()
+		chunks = [c for c in customization.customization_chunks() if c["title"].startswith(PREFIX)]  # not the bench's own records
 		self.assertTrue(len(chunks) >= 5)
 		for chunk in chunks:
 			self.assertNotIn("directive", seed_rules.hard_violations(chunk["summary"]), chunk["chunk_key"])
