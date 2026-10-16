@@ -56,7 +56,7 @@ def list_tools():
 
 
 # Errors whose text is meant for the user (ValueError is what tools raise for a bad argument value). Anything else (a database error names tables and SQL) is logged, not returned.
-USER_FACING = (frappe.ValidationError, frappe.PermissionError, InvalidArguments, guards.GateBlocked, guards.DangerousOp, TypeError, ValueError)
+USER_FACING = (frappe.ValidationError, frappe.PermissionError, frappe.DuplicateEntryError, InvalidArguments, guards.GateBlocked, guards.DangerousOp, TypeError, ValueError)
 
 
 def suggestion(e, logged=False):
@@ -103,14 +103,17 @@ def suggestion(e, logged=False):
 
 
 GENERIC_ERROR = "The server hit an unexpected error; it is recorded in Error Log {name}."
+UNLOGGED_ERROR = "The server hit an unexpected error, and it could not be recorded in the Error Log."
 
 PARTIAL = ("Some of this tool's changes may already be saved: it changed the database schema, which commits "
 	"immediately, so they could not be rolled back. get_doctype and list_fields show the current state.")
 
 
-def _error_result(e, partial=False, log_name=None):
-	message = GENERIC_ERROR.format(name=log_name) if log_name else str(e) or type(e).__name__
-	body = {"error": True, "message": message, "type": type(e).__name__, "suggestion": suggestion(e, logged=bool(log_name))}
+def _error_result(e, partial=False, log_name=None, unlogged=False):
+	"""`log_name`: the Error Log row of an unexpected error, whose text stays out of the answer. `unlogged`: the same, but no row could be written."""
+	message = GENERIC_ERROR.format(name=log_name) if log_name else UNLOGGED_ERROR if unlogged else str(e) or type(e).__name__
+	body = {"error": True, "message": message, "type": type(e).__name__,
+		"suggestion": "An administrator can find the cause in the server log." if unlogged else suggestion(e, logged=bool(log_name))}
 	if partial:
 		body["partial"] = PARTIAL
 	return {"content": [{"type": "text", "text": json.dumps(body, indent=2)}], "isError": True}
@@ -154,8 +157,10 @@ def call_tool(name, args):
 	except Exception as e:
 		partial = not undo_tool_writes()
 		# the rollback is done, so the Error Log row (it commits on its own) is not undone with the tool's writes
-		log_name = None if isinstance(e, USER_FACING) else frappe.log_error(title=f"ERPSmith tool {name} failed").name
-		return _error_result(e, partial=partial, log_name=log_name)
+		unexpected = not isinstance(e, USER_FACING)
+		log = frappe.log_error(title=f"ERPSmith tool {name} failed") if unexpected else None  # None on a read-only site
+		log_name = log and log.name
+		return _error_result(e, partial=partial, log_name=log_name, unlogged=unexpected and not log_name)
 	return {"content": [{"type": "text", "text": text}]}
 
 

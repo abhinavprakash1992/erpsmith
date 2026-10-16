@@ -107,6 +107,29 @@ class TestDispatch(FrappeTestCase):
 		self.assertTrue(frappe.db.exists("Error Log", match["name"]))
 		self.assertIn("get_error_logs", body["suggestion"])
 
+	def test_a_read_only_site_answers_an_unexpected_error_without_an_error_log_name(self):
+		def bad_sql():
+			frappe.db.sql("select * from `tabNo Such Table`")
+
+		self.register("get_bad_sql_test", bad_sql)
+		with patch("frappe.log_error", return_value=None):
+			err, body = call("get_bad_sql_test")
+		self.assertTrue(err)
+		self.assertEqual(body["message"], mcp.UNLOGGED_ERROR)
+		self.assertNotIn("tabNo Such Table", json.dumps(body))
+
+	def test_an_already_exists_error_comes_back_verbatim_without_an_error_log(self):
+		def duplicate():
+			raise frappe.DuplicateEntryError("ToDo", "TODO-1", Exception("dup"))
+
+		self.register("get_duplicate_test", duplicate)
+		with patch("frappe.log_error") as log_error:
+			err, body = call("get_duplicate_test")
+		self.assertTrue(err)
+		self.assertIn("TODO-1", body["message"])
+		self.assertIn("already exists", body["suggestion"])
+		log_error.assert_not_called()
+
 	def test_failed_tool_rolls_back_its_writes(self):
 		err, body = call("get_boom_test")
 		self.assertTrue(err)

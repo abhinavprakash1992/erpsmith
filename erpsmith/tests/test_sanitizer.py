@@ -58,6 +58,8 @@ WORKS = [
 	("import json\nx = json.dumps({'a': 1})", None),
 	("def f():\n    import frappe\n    return frappe.session.user\nx = f()", None),
 	("print('x')", None),
+	('type = frappe.form_dict.get("type") or "x"\nx = type', None),  # the script binds `type` itself
+	("def f(type):\n    return type\nx = f('a')", None),
 ]
 LOCALS = {"DocType Event": lambda: {"doc": frappe._dict(name="DOC-1")},
 	"Script Report": lambda: {"filters": frappe._dict(), "data": None, "result": None}}

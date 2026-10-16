@@ -43,7 +43,7 @@ jobs:
           - 11000:6379
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Same guard as dev/test.sh. The patterns are bracketed so this file does not match itself.
       - name: Customer-specific text and private data
@@ -56,11 +56,11 @@ jobs:
             echo "Customer-specific text found above: remove it before committing."; exit 1
           fi
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
 

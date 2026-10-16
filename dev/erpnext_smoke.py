@@ -111,7 +111,13 @@ def tools_section(helpers):
 	check('4. search_erpnext_knowledge "sales invoice" (Sales Invoice first)', search)
 
 
+SITES = ("erp15.localhost", "erp16.localhost")  # it creates and deletes records, so it runs on the dev benches only
+
+
 def main(site):
+	if site not in SITES:
+		print(f"refusing to run on {site}: this smoke creates and deletes records and runs only on {' or '.join(SITES)}")
+		return 2
 	frappe.init(site=site, sites_path=".")
 	frappe.connect()
 	frappe.set_user("Administrator")

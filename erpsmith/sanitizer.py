@@ -118,6 +118,10 @@ def check(script, script_type=None):
 		return script, [], [f"Line {e.lineno}: Python syntax error: {e.msg}"]
 	lines = script.split("\n")
 	removed, found = {}, []
+	# names the script binds itself (assignment, def, parameter) shadow the builtins it lacks: `type = 1` then `x = type` is fine
+	own = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)} \
+		| {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))} \
+		| {n.arg for n in ast.walk(tree) if isinstance(n, ast.arg)}
 
 	def flag(node, text):
 		found.append((node.lineno, text))
@@ -135,7 +139,7 @@ def check(script, script_type=None):
 			flag(node, "unpacking in an assignment (a, b = ...) raises NameError in the sandbox; assign the result to one "
 				"name and index it (pair = f(); a = pair[0]). Unpacking in a for loop works.")
 		elif isinstance(node, ast.Name):
-			if node.id in MISSING_BUILTINS and isinstance(node.ctx, ast.Load):
+			if node.id in MISSING_BUILTINS and isinstance(node.ctx, ast.Load) and node.id not in own:
 				flag(node, f"{node.id} is not available in the sandbox; {MISSING_BUILTINS[node.id]}")
 			elif node.id.startswith("_") and node.id != "_":
 				flag(node, f'the sandbox rejects names that start with "_" ({node.id}); rename it')
