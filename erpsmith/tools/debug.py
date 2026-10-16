@@ -44,7 +44,7 @@ def _scripts(doctype, name_or_doctype, by_doctype, fields):
 	"""The script named `name_or_doctype`, or else every script of that DocType (at most 20)."""
 	if frappe.db.exists(doctype, name_or_doctype):
 		return [frappe.client.get(doctype, name_or_doctype)]
-	rows = frappe.get_list(doctype, filters={by_doctype: name_or_doctype}, fields=fields, limit_page_length=20)
+	rows = frappe.get_list(doctype, filters={by_doctype: name_or_doctype}, fields=fields, limit=20)
 	if not rows:
 		raise frappe.DoesNotExistError(f"No {doctype} is named {name_or_doctype} or belongs to that DocType")
 	return rows
@@ -82,7 +82,7 @@ def _recent_errors(script_name):
 	if not frappe.has_permission("Error Log", "read"):
 		return []
 	return frappe.get_list("Error Log", filters=[["error", "like", f"%<serverscript>: {frappe.scrub(script_name)}%"]],
-		fields=["name", "creation", "error"], order_by="creation desc", limit_page_length=5)
+		fields=["name", "creation", "error"], order_by="creation desc", limit=5)
 
 
 def check_server_script(row):
@@ -203,7 +203,7 @@ def debug_workflow(doctypeOrWorkflow):
 		filters = [["docstatus", "=", 0], [field, "is", "set"]]
 		if states:
 			filters.append([field, "not in", states])
-		rows = frappe.get_list(wf.document_type, filters=filters, fields=["name", field], limit_page_length=100)
+		rows = frappe.get_list(wf.document_type, filters=filters, fields=["name", field], limit=100)
 		stuck = [{"name": r.name, "state": r[field]} for r in rows]
 		if stuck:
 			issues.append(_issue("stuck_documents", "error", f"{len(stuck)} draft documents are in a state the workflow no longer has.", documents=stuck))
@@ -250,7 +250,7 @@ def debug_data_integrity(doctype, limit=50):
 	links = [df for df in meta.fields if df.fieldtype == "Link" and df.options in doctypes and not df.is_virtual]
 	required = [df for df in meta.fields if df.reqd and df.fieldtype not in frappe.model.no_value_fields and not df.is_virtual]
 	columns = list(dict.fromkeys(["name", "docstatus", *(df.fieldname for df in links + required)]))[:25]
-	records = frappe.get_list(meta.name, fields=columns, order_by="creation desc", limit_page_length=clamp("limit", limit, 50, 1, 200))
+	records = frappe.get_list(meta.name, fields=columns, order_by="creation desc", limit=clamp("limit", limit, 50, 1, 200))
 	checked_links = [df for df in links if df.fieldname in columns][:5]  # each value costs a query
 	issues, seen = [], {}
 	for record in records:
@@ -286,7 +286,7 @@ def get_error_logs(method=None, doctype=None, since=None, limit=20):
 			filters.append(["creation", ">", get_datetime(since)])
 		except Exception:
 			raise InvalidArguments("since must be a date such as 2024-03-01") from None
-	rows = frappe.get_list("Error Log", filters=filters, order_by="creation desc", limit_page_length=clamp("limit", limit, 20, 1, 200),
+	rows = frappe.get_list("Error Log", filters=filters, order_by="creation desc", limit=clamp("limit", limit, 20, 1, 200),
 		fields=["name", "method", "error", "creation", "reference_doctype", "reference_name"])
 	return {"count": len(rows), "logs": [{"name": r.name, "method": r.method, "doctype": r.reference_doctype, "record": r.reference_name,
 		"when": r.creation, "error": (r.error or "")[-LOG_TAIL:]} for r in rows]}
@@ -294,7 +294,7 @@ def get_error_logs(method=None, doctype=None, since=None, limit=20):
 
 @tool("get_scheduler_logs")
 def get_scheduler_logs(limit=20):
-	rows = frappe.get_list("Scheduled Job Log", order_by="creation desc", limit_page_length=clamp("limit", limit, 20, 1, 200),
+	rows = frappe.get_list("Scheduled Job Log", order_by="creation desc", limit=clamp("limit", limit, 20, 1, 200),
 		fields=["name", "scheduled_job_type", "status", "creation", "details"])
 	return {"count": len(rows), "logs": [{"name": r.name, "job": r.scheduled_job_type, "status": r.status, "when": r.creation,
 		"details": (r.details or "")[-LOG_TAIL:]} for r in rows]}

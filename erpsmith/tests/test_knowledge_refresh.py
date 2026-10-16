@@ -7,7 +7,7 @@ from erpsmith import install, knowledge, memory
 from erpsmith.tests.helpers import server_scripts
 from erpsmith.tools.methods import READ_ONLY_FLAG
 
-JOB = {"job_id": "erpsmith-knowledge-build", "deduplicate": True, "enqueue_after_commit": True}
+JOB = {"job_id": knowledge.REFRESH_JOB_ID, "deduplicate": True, "enqueue_after_commit": True}
 
 
 def builds(enqueue):
@@ -42,6 +42,16 @@ class TestRefresh(FrappeTestCase):
 		for call in builds(enqueue):
 			self.assertEqual({k: call.kwargs[k] for k in (*JOB, "include_manual")}, {**JOB, "include_manual": False})
 
+	def test_a_full_build_is_not_swallowed_by_a_queued_refresh(self):
+		# Frappe drops a job whose job_id is already queued or running, so the two kinds of build need different ids.
+		with patch("frappe.enqueue") as enqueue:
+			knowledge.enqueue_build(include_manual=False)
+			knowledge.enqueue_build()
+		first, second = builds(enqueue)
+		self.assertEqual((first.kwargs["job_id"], second.kwargs["job_id"]), (knowledge.REFRESH_JOB_ID, knowledge.FULL_JOB_ID))
+		self.assertEqual((first.kwargs["include_manual"], second.kwargs["include_manual"]), (False, True))
+		self.assertNotEqual(knowledge.REFRESH_JOB_ID, knowledge.FULL_JOB_ID)
+
 	def test_many_saves_queue_one_build(self):
 		with patch("frappe.enqueue") as enqueue:
 			for n in range(100):
@@ -49,7 +59,7 @@ class TestRefresh(FrappeTestCase):
 		# Frappe checks `deduplicate` when enqueue is called, not when the after-commit push runs, so 100 calls would be
 		# 100 pushes of the same job
 		self.assertEqual(len(builds(enqueue)), 1)
-		self.assertEqual(builds(enqueue)[0].kwargs["job_id"], "erpsmith-knowledge-build")
+		self.assertEqual(builds(enqueue)[0].kwargs["job_id"], knowledge.REFRESH_JOB_ID)
 
 	def test_a_commit_or_rollback_lets_the_next_save_queue_again(self):
 		for n, end in enumerate((frappe.db.after_commit, frappe.db.after_rollback)):

@@ -140,7 +140,7 @@ def list_doctypes(module=None, search=None):
 		filters.append(["module", "=", module])
 	if search:
 		filters.append(["name", "like", f"%{search}%"])
-	rows = frappe.get_list("DocType", filters=filters, order_by="name asc", limit_page_length=200,
+	rows = frappe.get_list("DocType", filters=filters, order_by="name asc", limit=200,
 		fields=["name", "module", "custom", "istable", "issingle", "is_submittable", "description"])
 	return {"count": len(rows), "doctypes": rows}
 

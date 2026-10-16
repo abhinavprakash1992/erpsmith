@@ -1,10 +1,13 @@
 import json
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frappe
 import requests
 from frappe.tests.utils import FrappeTestCase
 
+import erpsmith
 from erpsmith import customization, install, knowledge, memory
 from erpsmith.tests.helpers import counted_sessions, empty_knowledge_table, knowledge_chunk
 
@@ -224,6 +227,41 @@ class TestBuild(FrappeTestCase):
 		self.assertGreaterEqual(commit.call_count, 3)
 
 
+class TestBuildLock(FrappeTestCase):
+	def test_two_builds_never_overlap(self):
+		events = []
+
+		@contextmanager
+		def recording_lock(name, **kwargs):
+			events.append(("enter", name, kwargs))
+			yield
+			events.append(("exit", name, kwargs))
+
+		def fetch(*args, **kwargs):
+			events.append(("work",))
+
+		with patch.object(knowledge, "filelock", recording_lock), patch.object(knowledge, "fetch_manual", fetch), \
+				patch.object(knowledge, "doctype_chunks", return_value=[]), patch.object(knowledge, "sync", return_value={}):
+			knowledge.build(include_manual=True, commit=False)
+		self.assertEqual([e[0] for e in events], ["enter", "work", "exit"])
+		self.assertEqual(events[0][1:], ("erpsmith-knowledge-build", {"timeout": 3600}))
+
+
+class TestManualUserAgent(FrappeTestCase):
+	def test_the_manual_fetch_identifies_itself(self):
+		with patch("erpsmith.knowledge.requests.get", return_value=reply({"data": PAGES})) as get:
+			knowledge.fetch_manual()
+		self.assertRegex(get.call_args.kwargs["headers"]["User-Agent"], r"^ERPSmith/\S+ \(\+https://github\.com/abhinavprakash1992/erpsmith\)$")
+
+
+class TestNoDeprecatedCalls(FrappeTestCase):
+	def test_no_deprecated_list_calls(self):
+		app = Path(erpsmith.__file__).parent
+		offenders = [str(p.relative_to(app)) for p in app.rglob("*.py") if "tests" not in p.relative_to(app).parts
+			and "limit_page_length" in p.read_text(encoding="utf-8")]
+		self.assertEqual(offenders, [])
+
+
 class TestBuildLoadsOnce(FrappeTestCase):
 	"""RQ forks a work horse per job, so a build must embed all its chunks inside the one job it runs in."""
 
@@ -244,7 +282,7 @@ class TestEnqueue(FrappeTestCase):
 		args, kwargs = enqueue.call_args
 		self.assertEqual(args, ("erpsmith.knowledge.build",))
 		self.assertEqual((kwargs["queue"], kwargs["job_id"], kwargs["deduplicate"], kwargs["enqueue_after_commit"]),
-			("long", "erpsmith-knowledge-build", True, True))
+			("long", knowledge.FULL_JOB_ID, True, True))
 		self.assertGreaterEqual(kwargs["timeout"], 1800)
 
 	def test_a_queue_failure_is_logged_not_raised(self):

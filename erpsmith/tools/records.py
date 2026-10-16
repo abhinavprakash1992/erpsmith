@@ -2,6 +2,12 @@
 
 import frappe
 import frappe.client
+from frappe.desk.reportview import validate_args
+
+try:
+	from frappe.model.db_query import check_parent_permission
+except ImportError:  # v16
+	check_parent_permission = None
 
 from erpsmith.registry import tool
 
@@ -74,14 +80,20 @@ def update_record(doctype, name, data):
 
 @tool("query_records")
 def query_records(doctype, filters=None, fields=None, limit=50, orderBy=None):
-	data = frappe.client.get_list(
-		doctype,
+	# frappe.client.get_list only takes the deprecated name for the row limit, so do its two steps here: check the
+	# arguments (fields, filters, order_by) and, on v15, that a child table has a parent (v16 checks inside get_list).
+	if check_parent_permission and frappe.is_table(doctype):
+		check_parent_permission(None, doctype)
+	args = frappe._dict(
+		doctype=doctype,
 		fields=fields or ["name"],
 		filters=filters or [],
 		order_by=orderBy or "modified desc",
 		# Frappe reads a limit of 0 as "no limit", so 0 and None mean the default and negatives mean 1.
-		limit_page_length=max(1, min(int(limit or 50), MAX_LIMIT)),
+		limit=max(1, min(int(limit or 50), MAX_LIMIT)),
 	)
+	validate_args(args)
+	data = frappe.get_list(**args)
 	return {"doctype": doctype, "count": len(data), "data": data}
 
 

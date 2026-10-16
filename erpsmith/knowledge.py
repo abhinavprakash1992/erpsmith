@@ -13,7 +13,9 @@ from urllib.parse import quote
 
 import frappe
 import requests
+from frappe.utils.synchronization import filelock
 
+import erpsmith
 from erpsmith import customization, memory, profile, vector_cache, vectors
 from erpsmith.registry import InvalidArguments, clamp, required_text, tool
 from erpsmith.tools.methods import READ_ONLY_FLAG
@@ -155,16 +157,17 @@ MANUAL_BASE = "https://docs.erpnext.com/"
 CHUNK_CHARS = 1500
 MIN_CHUNK_CHARS = 80
 COMMIT_EVERY = 200
+USER_AGENT = f"ERPSmith/{erpsmith.__version__} (+https://github.com/abhinavprakash1992/erpsmith)"
 
 
 def fetch_manual():
 	"""The published user manual's pages [{title, route, content}], or None when they cannot be read
 	(logged; the build goes on without the manual)."""
 	try:
-		response = requests.get(MANUAL_URL, timeout=120, params={
+		response = requests.get(MANUAL_URL, timeout=120, headers={"User-Agent": USER_AGENT}, params={
 			"fields": json.dumps(["title", "route", "content"]),
 			"filters": json.dumps([["route", "like", "docs/user/%"], ["published", "=", 1]]),
-			"limit_page_length": "0",
+			"limit": "0",
 		})
 		response.raise_for_status()
 		pages = response.json()["data"]
@@ -248,6 +251,9 @@ def _stored_intros():
 	return intros
 
 
+LOCK_NAME = "erpsmith-knowledge-build"
+
+
 def build(include_manual=True, commit=True, only_doctypes=None):
 	"""Bring the knowledge chunks up to date. Runs as ONE background job (an RQ work horse is forked per job,
 	so the embedding model loads once per build, not once per chunk) and never calls mcp.call_tool.
@@ -257,25 +263,32 @@ def build(include_manual=True, commit=True, only_doctypes=None):
 	A manual that cannot be fetched is logged and skipped: the stored manual chunks stay, and the DocType chunks keep
 	the intros they had. Stale DocType chunks are deleted only on a full build (`only_doctypes` unset), stale manual
 	chunks only when the manual was fetched."""
-	pages = fetch_manual() if include_manual else None
-	manual = manual_chunks(pages) if pages is not None else []
-	intros = _intros(manual) if pages is not None else _stored_intros()
-	chunks = doctype_chunks(intros=intros, only=only_doctypes) + customization.customization_chunks() + manual
-	delete_kinds = (("doctype", "customization") if only_doctypes is None else ()) + (("manual",) if pages is not None else ())
-	counts = sync(chunks, delete_kinds, COMMIT_EVERY if commit else 0)
-	counts["profile"] = profile.sync_profile(profile.profile_notes())
-	if commit:
-		frappe.db.commit()
-	counts["manual"] = (f"{len(pages)} pages" if pages is not None
-		else "not requested" if not include_manual else "skipped: could not be fetched")
-	return counts
+	with filelock(LOCK_NAME, timeout=3600):  # two builds (a refresh and a full one) must not write the same chunks at once
+		pages = fetch_manual() if include_manual else None
+		manual = manual_chunks(pages) if pages is not None else []
+		intros = _intros(manual) if pages is not None else _stored_intros()
+		chunks = doctype_chunks(intros=intros, only=only_doctypes) + customization.customization_chunks() + manual
+		delete_kinds = (("doctype", "customization") if only_doctypes is None else ()) + (("manual",) if pages is not None else ())
+		counts = sync(chunks, delete_kinds, COMMIT_EVERY if commit else 0)
+		counts["profile"] = profile.sync_profile(profile.profile_notes())
+		if commit:
+			frappe.db.commit()
+		counts["manual"] = (f"{len(pages)} pages" if pages is not None
+			else "not requested" if not include_manual else "skipped: could not be fetched")
+		return counts
+
+
+# Frappe drops a job whose job_id is already queued or running, so a refresh (no manual) and a full build (with the
+# manual) get different ids: a queued refresh must not swallow the full build that install and migrate ask for.
+FULL_JOB_ID = "erpsmith-knowledge-build-full"
+REFRESH_JOB_ID = "erpsmith-knowledge-build"
 
 
 def enqueue_build(include_manual=True):
-	"""Queue the build as one long job (once: a second request while it waits or runs is dropped). A failure to
+	"""Queue the build as one long job (once per kind: a second request while it waits or runs is dropped). A failure to
 	queue it, for example Redis being down during an install, is logged and must not fail the install."""
 	try:
-		frappe.enqueue("erpsmith.knowledge.build", queue="long", timeout=3600, job_id="erpsmith-knowledge-build",
+		frappe.enqueue("erpsmith.knowledge.build", queue="long", timeout=3600, job_id=FULL_JOB_ID if include_manual else REFRESH_JOB_ID,
 			deduplicate=True, enqueue_after_commit=True, include_manual=include_manual)
 	except Exception:
 		frappe.log_error(title="ERPSmith: could not queue the knowledge build")

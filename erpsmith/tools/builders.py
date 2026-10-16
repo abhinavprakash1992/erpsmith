@@ -91,7 +91,7 @@ def create_workflow(name, doctype, states, transitions, sendEmailAlerts=False):
 
 @tool("list_workflows")
 def list_workflows(doctype=None):
-	rows = frappe.get_list("Workflow", filters={"document_type": doctype} if doctype else {}, limit_page_length=50,
+	rows = frappe.get_list("Workflow", filters={"document_type": doctype} if doctype else {}, limit=50,
 		fields=["name", "document_type", "is_active", "workflow_state_field", "modified"], order_by="modified desc")
 	return {"count": len(rows), "workflows": rows}
 

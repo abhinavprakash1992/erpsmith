@@ -56,7 +56,7 @@ def update_client_script(name, script=None, enabled=None):
 
 @tool("list_client_scripts")
 def list_client_scripts(doctype=None):
-	rows = frappe.get_list("Client Script", filters={"dt": doctype} if doctype else {}, limit_page_length=100,
+	rows = frappe.get_list("Client Script", filters={"dt": doctype} if doctype else {}, limit=100,
 		fields=["name", "dt", "view", "enabled", "modified"], order_by="modified desc")
 	return {"count": len(rows), "scripts": [{**_client(r), "modified": r["modified"]} for r in rows]}
 
@@ -105,7 +105,7 @@ def update_server_script(name, script=None, enabled=None, event=None):
 @tool("list_server_scripts")
 def list_server_scripts(doctype=None, scriptType=None):
 	filters = {k: v for k, v in (("reference_doctype", doctype), ("script_type", scriptType)) if v}
-	rows = frappe.get_list("Server Script", filters=filters, limit_page_length=100, order_by="modified desc",
+	rows = frappe.get_list("Server Script", filters=filters, limit=100, order_by="modified desc",
 		fields=["name", "script_type", "reference_doctype", "doctype_event", "api_method", "event_frequency", "disabled", "modified"])
 	return {"count": len(rows), "scripts": [{**_server(r), "modified": r["modified"]} for r in rows]}
 
