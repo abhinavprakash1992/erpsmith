@@ -152,6 +152,8 @@ def check_seeds(seeds):
 		key = seed["seed_key"]
 		if not isinstance(key, str) or not SEED_KEY.fullmatch(key):
 			raise ValueError(f"seed {i}: bad seed_key {key!r} (lowercase letters, digits and dashes)")
+		if key.startswith("profile-"):
+			raise ValueError(f"seed {i}: seed_key {key!r} starts with profile-, which belongs to the generated site profile")
 		if key in keys:
 			raise ValueError(f"seed {i}: duplicate seed_key {key!r}")
 		keys.add(key)

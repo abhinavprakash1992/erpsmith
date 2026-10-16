@@ -14,7 +14,7 @@ from urllib.parse import quote
 import frappe
 import requests
 
-from erpsmith import customization, memory, vector_cache, vectors
+from erpsmith import customization, memory, profile, vector_cache, vectors
 from erpsmith.registry import InvalidArguments, clamp, required_text, tool
 from erpsmith.tools.methods import READ_ONLY_FLAG
 
@@ -263,6 +263,9 @@ def build(include_manual=True, commit=True, only_doctypes=None):
 	chunks = doctype_chunks(intros=intros, only=only_doctypes) + customization.customization_chunks() + manual
 	delete_kinds = (("doctype", "customization") if only_doctypes is None else ()) + (("manual",) if pages is not None else ())
 	counts = sync(chunks, delete_kinds, COMMIT_EVERY if commit else 0)
+	counts["profile"] = profile.sync_profile(profile.profile_notes())
+	if commit:
+		frappe.db.commit()
 	counts["manual"] = (f"{len(pages)} pages" if pages is not None
 		else "not requested" if not include_manual else "skipped: could not be fetched")
 	return counts
