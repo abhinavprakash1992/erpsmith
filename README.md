@@ -44,7 +44,7 @@ Every tool that changes something is rejected until a plan covering it has been 
 
 ## Memory, knowledge and the site profile
 
-- **Memory** (`search_memory`, `add_memory`, ...): notes the assistant searches by meaning. 96 notes ship with the app (Frappe sandbox rules, working patterns, known fixes); you and the assistant add your own. Notes are shared across the site and readable by System Managers.
+- **Memory** (`search_memory`, `add_memory`, ...): notes the assistant searches by meaning. 109 notes ship with the app (Frappe sandbox rules, working patterns, known fixes); you and the assistant add your own. Notes are shared across the site and readable by System Managers.
 - **Knowledge** (`search_erpnext_knowledge`): an index of your site's DocType structure (custom fields included), workflows, scripts, notifications and print formats, plus the ERPNext user manual. It is built in the background after install and migrate and refreshed when those records change. Script code in the index has secrets scrubbed on a best-effort basis; keep secrets in password fields or site config, not in scripts.
 - **Site profile**: short generated notes (topic `context`) on your companies, currencies, warehouses, naming series, installed apps, workflows and customization footprint. Edits to these generated notes are overwritten on the next build.
 

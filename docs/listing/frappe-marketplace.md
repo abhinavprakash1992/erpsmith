@@ -16,7 +16,7 @@ ERPSmith lets Claude, or any MCP client, build and debug customizations on your 
 
 **You approve every change.** Every change to your site's records and customizations waits for a plan you have read and approved; only memory notes are not gated. Plans are kept in Desk as an audit trail and are deleted once they are more than 7 days old and can no longer unlock anything. Everything runs as the signed-in user, so it can do only what that user's roles allow, and a few dangerous operations are blocked outright.
 
-**It remembers.** 96 curated notes on Frappe's script sandbox, working patterns and known fixes come with the app, searchable by meaning. It also indexes your site's own customizations and writes a short site profile, and you can teach it how your company works.
+**It remembers.** 109 curated notes on Frappe's script sandbox, working patterns and known fixes come with the app, searchable by meaning. It also indexes your site's own customizations and writes a short site profile, and you can teach it how your company works.
 
 **Sign in, nothing else.** Add `https://<your-site>/api/method/erpsmith.mcp.handle` as a custom connector in Claude and sign in with OAuth on Frappe v15 or v16. No keys to hand out.
 
