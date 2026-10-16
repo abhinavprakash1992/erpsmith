@@ -8,7 +8,6 @@ license = "MIT"
 license-files = ["license.txt"]
 keywords = ["frappe", "erpnext", "mcp", "ai"]
 classifiers = [
-    "Framework :: Frappe",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",

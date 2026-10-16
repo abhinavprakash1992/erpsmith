@@ -42,3 +42,8 @@ class TestCIWorkflow(FrappeTestCase):
 	def test_customer_specific_text_is_grepped_in_its_own_step(self):
 		steps = [s for s in self.job["steps"] if "grep" in s.get("run", "") and "private" in s["run"]]
 		self.assertEqual(len(steps), 1)
+
+	def test_the_site_has_developer_mode_and_tests_allowed(self):
+		setup = "\n".join(self.runs)
+		self.assertIn("set-config allow_tests true", setup)
+		self.assertIn("set-config developer_mode 1", setup)

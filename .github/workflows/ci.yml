@@ -69,6 +69,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libcups2-dev mariadb-client
           pip install frappe-bench
+          npm i -g yarn
 
       - name: Database character set
         run: |
@@ -87,13 +88,14 @@ jobs:
       - name: Get the app from this checkout
         run: |
           cd ~/frappe-bench
-          bench get-app erpsmith "$GITHUB_WORKSPACE"
+          bench get-app --skip-assets erpsmith "$GITHUB_WORKSPACE"
 
       - name: New site with tests allowed, install the app
         run: |
           cd ~/frappe-bench
           bench new-site test_site --db-root-password root --admin-password admin --mariadb-user-host-login-scope='%'
           bench --site test_site set-config allow_tests true
+          bench --site test_site set-config developer_mode 1
           bench --site test_site install-app erpsmith
 
       # `bench run-tests` exits 0 on v15 even when tests fail, so the next step judges by what was printed.
