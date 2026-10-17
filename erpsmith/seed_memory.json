@@ -114,6 +114,12 @@
   "content": "What the Frappe server-script runtime accepts:\n\n| Feature | Frappe runtime |\n|---|---|\n| f-strings | Works |\n| `isinstance()` | Works |\n| `.format()` | Blocked (`.format` is an unsafe attribute) |\n| `import` | Blocked |"
  },
  {
+  "seed_key": "assignment-rule-runs-after-after-insert-scripts",
+  "topic": "pattern",
+  "title": "Assignment Rules run after After Insert scripts, so a Before Insert stamp is visible to `assign_condition`",
+  "content": "`Document.insert()` runs Before Insert, names and writes the document, runs After Insert (controller, hooks, then Server Scripts), and then the on_update stage, where `assignment_rule.apply` is hooked. An After Insert Server Script therefore sees no ToDo from the Assignment Rule yet, and a field stamped in a Before Insert script is in place when `assign_condition` is evaluated. `apply` is also hooked on later saves, cancel and update-after-submit, so the condition is evaluated again on each of them, and a flag that permanently satisfies or blocks it governs later saves too.\n\nIn a Server Script `frappe.desk.form.assign_to.add` is unavailable (it resolves to None), and assigning `doc._assign` fails to compile because names starting with `_` are blocked. Inserting a ToDo with `reference_type` and `reference_name` (`frappe.get_doc({...}).insert(ignore_permissions=True)`) works from a Server Script and updates the document's `_assign`."
+ },
+ {
   "seed_key": "background-job-failure-tracking-surfacing-frappe-e",
   "topic": "pattern",
   "title": "Background job failure tracking: surfacing `frappe.enqueue` failures on the source document",
@@ -270,6 +276,12 @@
   "content": "Recipient lists written into scripts bypass the `enabled=1` user filter, so disabled users kept receiving mail, and each hard bounce fed a loop. The relationship between User records and mailboxes is independent in both directions: an enabled System User can have no mailbox (Cc'd test mails to one produced Delivery Status Notification bounces), while addresses with no `tabUser` row at all can be live, working mailboxes. A successful send or a bounce is the only evidence of deliverability. A per-event mail to several recipients for many documents a day is many metered sends; an hourly or end-of-day digest brings that to a handful."
  },
  {
+  "seed_key": "idempotency-lock-field-with-ttl-committed-at-create",
+  "topic": "pattern",
+  "title": "Idempotency lock for a slow external call: an `id|epoch` field with a TTL, committed at create, cleared on both outcomes",
+  "content": "A two-step create-then-book flow that writes its duplicate guard only when booking finishes leaves the record unguarded during the slow external call, and a retry in that window creates a second document and a second external booking. A lock in a dedicated field (separate from the 'done' field that other readers treat as booked) can hold `<document name>|<epoch seconds>`, recording who took it and when. The guard rejects when the done field is set, or when a lock exists that is younger than the TTL (for example 600 s) and whose document still exists.\n\nThe lock is written right after the create and followed by `frappe.db.commit()` in the API Server Script, since the commit is what makes it visible to the next request while this one is still waiting on the vendor. `frappe.db.commit` exists in API and Scheduler Event scripts; DocType Event scripts lack it (calling it raises AttributeError). The lock is cleared on both outcomes: in the same `set_value` that stamps completion, and on failure only if it still points at this document (`cur.split(\"|\")[0] == name`), so a late-finishing first attempt cannot wipe a second attempt's lock. Without the TTL, a crash between stamping and clearing would hold the lock forever."
+ },
+ {
   "seed_key": "inbound-email-threading-rules-in-frappe-v15",
   "topic": "pattern",
   "title": "How Frappe v15 threads inbound mail to an existing document, and why a fresh compose opens a new one",
@@ -300,10 +312,22 @@
   "content": "A Script Report answering 'stock at the start and end of each month, in units and value' computes: (1) a `base` CTE summing `actual_qty` and `stock_value_difference` of all non-cancelled SLE before From Date, which makes opening a true running balance; (2) an `mv` CTE of per-month in/out/net inside the range; (3) a recursive CTE month spine `CROSS JOIN` the grouping combinations so months with no movement still get a row; (4) `SUM(net) OVER (PARTITION BY g1,g2 ORDER BY m ROWS UNBOUNDED PRECEDING)` for closing, with opening = closing - net; `is_cancelled = 0` throughout. The grouping columns are injected by string replacement of placeholders, not f-strings. `frappe.db.sql` accepts read-only `WITH` queries on MariaDB.\n\nValue is the cumulative `stock_value_difference`, the same basis as ERPNext Stock Balance (cost, not selling price). A TOTAL row per month and a PERIOD TOTAL row take opening from the earliest month and closing from the latest; summing opening balances across months would invent phantom units, which is why `add_total_row` is not used. The report `timeout` needs raising (600) because the first run scans all history before From Date."
  },
  {
+  "seed_key": "notification-recipient-fields-and-cc-bcc-for-fixed-addresses",
+  "topic": "pattern",
+  "title": "Notification recipients: `receiver_by_document_field` names a field, so fixed addresses go in `cc` / `bcc`",
+  "content": "A Notification Recipient row has:\n\n- `receiver_by_document_field`: a Select of the target DocType's email-bearing fields (such as `owner`, `contact_email`, `raised_by`), or `field,child_table` for a field in a child table. It holds a field name, not an address; a literal address there resolves to no recipient.\n- `receiver_by_role`: the emails of Users holding the role. A role that nobody holds yields no recipient and no error.\n- `cc` / `bcc`: free text (Code fields), the place for fixed addresses. Several addresses in one row work, separated by commas or newlines, and the text is rendered as Jinja first when it contains `{`.\n- `condition`: a per-row Python condition evaluated against the document.\n\nA shared mailbox modelled as a Role needs a real User account holding that role; `cc` / `bcc` avoids that. On a customer-facing notification, internal addresses in `bcc` stay hidden from the customer."
+ },
+ {
   "seed_key": "oauth-discovery-and-client-differences-frappe-v15-v16",
   "topic": "pattern",
   "title": "OAuth provider differences between Frappe v15 and v16 that affect MCP-style connectors",
   "content": "v16 core serves `/.well-known/oauth-*` and dynamic client registration, on by default (`OAuth Settings`); v15 has neither, only `openid_configuration`, though v15 has PKCE fields on `OAuth Authorization Code`. v15's OAuth `authenticate_client` does not check `client_secret`, so public PKCE clients work. v15 answers a bad, expired or revoked bearer token with a 401 raised in `validate_auth` before the endpoint runs, so no `WWW-Authenticate` header (tokens last 1 h by default); an `after_request` hook (called as `frappe.call(hook, response=, request=)` from `finally:` in `frappe.app.application`) can add it, and v16 core replaces it with its own. v16 registers dynamic clients with scope `all` only (`all openid` gives `invalid_scope`) and refuses `http://` redirect URIs on an https site.\n\nBehind a tunnel or proxy, `bench serve` needs `--proxy` or v16 builds `http://` metadata URLs from the request; on v15, `host_name` (no trailing slash) and `restart_supervisor_on_update` have to be set or `get_url()` appends `:8000`. Cloudflare quick tunnels drop after about an hour. Claude registers two OAuth clients per connect attempt, so a per-IP limit of 20 registrations an hour allows about 10 attempts. `frappe/mcp` pins `Werkzeug==3.1.3` / `pydantic~=2.11.7` against Frappe's 3.1.6 / 2.12, so it cannot be installed next to Frappe v15/v16, and it answers guests with 403 rather than the 401 + `WWW-Authenticate` that discovery needs. Checked on frappe 15.123 and 16.52."
+ },
+ {
+  "seed_key": "on-update-webhook-with-write-back-consumer-loops",
+  "topic": "pattern",
+  "title": "An `on_update` Webhook to a service that writes back to the same document re-fires on every write-back",
+  "content": "An `on_update` Webhook is queued on every save of the document, whichever fields changed (only the Webhook's condition filters it), and is sent after the transaction commits. When the receiving service writes its results back to the same document over REST, that save fires `on_update` again and the webhook calls the service again: a loop with no natural end. A Webhook condition that passes only when there is something new for the service breaks it. A watermark (for example the timestamp of the last customer message already processed) works better than an 'already processed' flag, because a flag also suppresses the later customer replies the webhook exists to catch. Existing `on_update` Webhooks on DocTypes that other integrations also write to loop the same way."
  },
  {
   "seed_key": "operations-that-commit-the-open-transaction",
@@ -322,6 +346,12 @@
   "topic": "pattern",
   "title": "Outgoing account resolution: `find_outgoing` matches the sender address first; `Notification.sender_email` is independent",
   "content": "`EmailAccount.find_outgoing()` matches the requested sender address before it considers `append_to`; with no match the mail leaves through the account flagged `default_outgoing`. An app that asks for an address by name keeps getting that account even after `default_outgoing` is moved. Setting `enable_outgoing = 0` on that account makes the lookup fall through to the default, which was the only lever settings offered for consolidating onto one account.\n\n`Notification.sender_email` is an independent Data field, not fetched from the `sender` Email Account link: changing the link alone leaves the old From address sending, and the record looks correct in the UI. Both fields are set together.\n\nMailers that pass no `sender` land on the default outgoing account, which put internal cron reports on a customer-facing mailbox and its send quota. A Before Insert script on Email Queue can route referenceless internal mail elsewhere; mail carrying a `reference_doctype` is the part that cannot safely be moved."
+ },
+ {
+  "seed_key": "override-doctype-class-last-installed-app-wins",
+  "topic": "pattern",
+  "title": "When two apps override the same DocType class, the app later in the site's installed-apps order wins",
+  "content": "`override_doctype_class` and `override_whitelisted_methods` collect the hook from every app and use the last entry. Hooks are gathered in the order of the site's `installed_apps` (install order, shown and reorderable in Installed Applications), not in the order of `sites/apps.txt`. A custom app's override of a DocType that another installed app also overrides (a localisation app, for example) is therefore decided by app order, not by intent: the app installed later, or moved later in Installed Applications, wins. On v16 the winning class has to subclass the original DocType class, or loading the DocType throws 'Invalid Override'."
  },
  {
   "seed_key": "owner-is-default-field-not-settable-and-is-cc-d",
@@ -354,6 +384,12 @@
   "content": "Where the Delivery Note is submitted at warehouse issue and courier handover is a separate, later step, a Sales Order can show Completed / `per_delivered = 100` while the parcel is still undispatched. A dispatch record (for example a Shipment with an AWB) is the dispatch signal, not `per_delivered`. The Sales Order `customer_name` of orders created from a web checkout may carry an appended id suffix, so greetings are taken from the source data rather than from `customer_name`."
  },
  {
+  "seed_key": "post-model-sync-patches-run-before-sync-fixtures",
+  "topic": "pattern",
+  "title": "`post_model_sync` patches run before fixtures are synced during `bench migrate`",
+  "content": "In `frappe/migrate.py` on v15 and v16, `bench migrate` syncs the DocTypes and runs the `[post_model_sync]` patches (`run_schema_updates`), and only after that calls `sync_fixtures()` (`post_schema_updates`). A `post_model_sync` patch that depends on records shipped as fixtures (Custom Fields, Property Setters) therefore runs before those records exist on a site being upgraded. Such a patch can call `frappe.utils.fixtures.sync_fixtures(\"<app>\")` itself first."
+ },
+ {
   "seed_key": "purchase-receipt-quantity-lives-in-many-tables",
   "topic": "pattern",
   "title": "A submitted serialised Purchase Receipt carries its quantity in about nine tables that move together",
@@ -372,6 +408,12 @@
   "content": "`frappe.get_doc(\"File\", file_name).get_content()` returns an uploaded file's content inside a Server Script. Parsing in the browser and posting rows as JSON in `frappe.form_dict` also works."
  },
  {
+  "seed_key": "rest-put-doctype-replaces-fields-wholesale",
+  "topic": "pattern",
+  "title": "Updating a DocType over REST replaces its whole `fields` list",
+  "content": "`PUT /api/resource/DocType/<name>` runs `doc.update(data)` and then `doc.save()`, and `update` replaces any child table present in the body. A body that carries only a new field (`{\"fields\": [{\"fieldname\": \"capacity\", \"fieldtype\": \"Int\"}]}`) leaves the DocType with that single field: every existing field is removed. Adding a field this way means sending the existing `fields` rows back alongside the new one, or adding a Custom Field instead. The same replacement applies to any child table sent in a REST update of any document (`/api/resource` and `/api/v2/document`)."
+ },
+ {
   "seed_key": "restored-production-copy-needs-mail-scheduler-webhook-fencing",
   "topic": "pattern",
   "title": "A restored production copy needs outbound and inbound fencing before it starts, and restore overwrites the Administrator password",
@@ -384,10 +426,22 @@
   "content": "- Failed jobs persist **about 7 days** (`failure_ttl` = 604800s; `rq_job_failure_ttl` overrides it)\n- Successful jobs are cleared in **about 10 minutes** (`result_ttl` = 600 s; `rq_results_ttl` in site config overrides it)\n\nImplication: when a job_id is missing AND its age is over about 120s, the job almost certainly **succeeded**, not failed. Treating a missing job as still queued leaves successes stuck in Queued forever.\n\nDecision tree that works:\n- exists + `failed` → mark Failed, copy `exc_info`\n- exists + `finished` → mark Completed\n- exists + `started` → mark Processing\n- missing AND age > 120s → mark Completed\n- missing AND fresh → leave alone"
  },
  {
+  "seed_key": "sales-order-delivery-date-cannot-precede-transaction-date",
+  "topic": "pattern",
+  "title": "Backdating or postdating a Sales Order: `transaction_date` defaults to today and `delivery_date` cannot precede it",
+  "content": "A Sales Order inserted without `transaction_date` gets today's date (the field default is `Today`), so a script that creates orders from older or future source records stores the creation day as the order date unless it sets the date itself. ERPNext rejects an item `delivery_date` earlier than `transaction_date` with 'Expected Delivery Date should be after Sales Order Date' (for order type Sales, unless Skip Delivery Note is set). A fixed `delivery_date` of today plus 7 is harmless for a backdated order but fails once the chosen order date is more than 7 days ahead; deriving both from the chosen date (`delivery_date = add_days(order_date, 7)`) removes the failure. When the same script also submits the order there is no draft to correct the date in, and an idempotency guard such as `if doc.sales_order: return` makes later edits of the source date do nothing."
+ },
+ {
   "seed_key": "scheduler-job-300s-timeout-wall-clock-budget",
   "topic": "pattern",
   "title": "Scheduled Server Scripts die at 300 s: a wall-clock budget turns a crash into a reported partial run",
   "content": "A Server Script on a Scheduler Event killed at the default queue timeout shows `rq.timeouts.JobTimeoutException: Task exceeded maximum timeout value (300 seconds)` in Error Log, usually mid-HTTP call. An hourly job with hundreds of queued rows and several seconds per external call cannot finish, so which rows get polled is whatever the executioner reaches. The tell was the absence of a log line: the final summary (`updated N, unchanged M of P polled`) had not been written once.\n\nA fix that held: take `budget_start = frappe.utils.now_datetime()` and break at 210 s (leaving room for one in-flight call and the writes), so a truncated run is a reported outcome; log the summary unconditionally (a dead run and a healthy one otherwise look identical); and interleave a priority pool (`order_by=\"creation desc\"`) with a backlog pool (`order_by=\"modified asc\"`) rather than concatenating them, since with every run cut short the pool placed second is not reached. Skipping the child-table rewrite when the provider's status date is unchanged saves writes but not the HTTP call, which is where the budget goes. Timing out hid for weeks because Scheduled Job Log rows only say 'Start'; real failures live in Error Log, whose `method` and `error` columns are used inconsistently across scripts, so searching one column alone misses rows."
+ },
+ {
+  "seed_key": "scheduler-worker-progress-by-flipping-row-status",
+  "topic": "pattern",
+  "title": "Resumable chunked scheduler worker: progress is tracked by moving each row out of `Valid`, not by an offset",
+  "content": "A Scheduler Event worker that processes uploaded child rows in chunks (for example 1000 per tick) can track progress by changing each row's status away from `Valid` (to Applied or Failed) as it handles the row, instead of keeping an offset pointer. The next tick picks up whatever is still `Valid`, so the worker resumes across ticks, cannot loop forever (every touched row leaves the set) and survives a crash mid-chunk. The parent keeps its own terminal status (Completed / Completed with Errors). Nothing resets that status if the script itself crashes mid-run, so the parent stays in Processing until a separate stuck-job check notices it.\n\nChild fields that hold user-supplied keys can be Data rather than Link on purpose: a Link field is validated at insert, so one bad CSV row raises `LinkValidationError` and the whole upload fails without showing which rows were wrong, while Data rows land in the grid and the worker marks them Invalid with a reason."
  },
  {
   "seed_key": "script-report-return-convention-data-columns-rows",
@@ -430,6 +484,12 @@
   "topic": "pattern",
   "title": "Webhook handler: reading the POST body",
   "content": "`frappe.request` in the sandbox is a stub (`{'path': ...}`) without the body, so the POST body is read from `frappe.form_dict`, which holds the parsed body:\n```python\npayload = frappe.form_dict\nevent = payload.get(\"event\", \"\")\n```"
+ },
+ {
+  "seed_key": "webhook-json-structure-clears-webhook-data-on-save",
+  "topic": "pattern",
+  "title": "A Webhook with request structure JSON drops its `webhook_data` rows on save",
+  "content": "`Webhook.validate_request_body()` sets `self.webhook_data = []` whenever `request_structure` is `JSON`, without any message, so field-mapping rows entered for a JSON webhook disappear on save and the body comes only from `webhook_json`. That field is a Jinja template; piping each value through `| tojson` keeps quotes inside values (HTML bodies, for example) from breaking the JSON. `Webhook` uses prompt naming, so an insert from a script without `doc.name` raises a ValidationError."
  },
  {
   "seed_key": "workflow-rejected-state-is-docstatus-0-and-self-approval",
@@ -522,6 +582,12 @@
   "content": "A throw in a `Communication` Before Insert hook, or in anything that runs after the Communication row has committed inside `EmailAccount.receive()`, leaves the message unmarked on the IMAP server. The next sync pulls it again and inserts another Communication, so duplicates accumulate each cycle. Server Scripts on these events wrap their whole body in try/except for that reason. The same wrapper that keeps receive safe also destroys evidence when a guard does not fire; a temporary `frappe.log_error` trace on the skip path shows why, and is removed once the guard is verified against a real mail."
  },
  {
+  "seed_key": "item-merge-repost-blocked-by-accounts-frozen-date",
+  "topic": "bug-fix",
+  "title": "Item merge fails with 'You cannot repost item valuation before <date>' when an accounts-frozen date is set",
+  "content": "Merging Items (a rename with merge) reposts stock for each warehouse through a Repost Item Valuation dated 1900-01-01. That repost is checked against the accounts-frozen date, so with any frozen date set the merge throws 'You cannot repost item valuation before <frozen date>' (a user holding the role allowed to edit frozen entries gets only a caution message). A malformed frozen date, such as one in 1900, gives the same message with that odd date. The setting lives in different places by version:\n\n- v15: Accounts Settings `acc_frozen_upto` (role in `frozen_accounts_modifier`). `SELECT * FROM tabSingles WHERE doctype='Accounts Settings' AND field='acc_frozen_upto'` shows it, and `bench --site <site> execute frappe.db.set_single_value --args \"['Accounts Settings', 'acc_frozen_upto', None]\"` clears it.\n- v16: per Company, `accounts_frozen_till_date` (role in `role_allowed_for_frozen_entries`).\n\nWith the date cleared the merge goes through, and the date can be set again afterwards."
+ },
+ {
   "seed_key": "naming-series-revert-on-delete-reuses-names",
   "topic": "bug-fix",
   "title": "Deleting the newest document of a series reverts the counter, so the next document reuses the name and can collide with external records",
@@ -558,6 +624,12 @@
   "content": "**Symptom:** an Item merge fails with \"You cannot repost item valuation before 1900-03-31\".\n**Root cause:** Serial No records with `purchase_date = NULL` (stored as `0000-00-00`).\n**Fix:** set `purchase_date` to the record's `creation` date on the affected Serial Nos. New Serial Nos with a null purchase_date bring the same error back."
  },
  {
+  "seed_key": "series-row-lock-causes-server-too-busy-508",
+  "topic": "bug-fix",
+  "title": "'Server was too busy to process this request' can be a `tabSeries` row lock held until commit",
+  "content": "Naming a document reads its `tabSeries` row with `SELECT ... FOR UPDATE` (`getseries`, called from `set_new_name()` right after Before Insert), and the row stays locked until that transaction commits or rolls back. Every other insert that uses the same series key waits behind it, and DocTypes that share a key (for example the empty-key row shared by `format:` and bare-hash names) contend site-wide. A long transaction that names documents (a bulk job creating many records in one transaction, mail ingestion creating tickets, a slow external HTTP call inside the naming request) blocks all of them. When `innodb_lock_wait_timeout` expires, the waiters get MariaDB error 1205, which Frappe treats as a timeout and returns as HTTP 508; the desk shows it as 'Server was too busy to process this request. Please try again.' CPU and workers can be idle at the time.\n\nRaising `innodb_lock_wait_timeout` turns the error into a longer hang. A retried request can overlap the original, which may still commit, so identical inserts can be in flight together. `information_schema.innodb_trx` ordered by `trx_started` shows the transaction holding the lock."
+ },
+ {
   "seed_key": "set-value-on-child-table-field-replaces-all-rows",
   "topic": "bug-fix",
   "title": "`frappe.client.set_value` on a child-table field replaces every row, e.g. wiping a user's roles",
@@ -568,6 +640,12 @@
   "topic": "bug-fix",
   "title": "Standard Notifications refuse edits; single-brace `{doc.field}` placeholders render literally",
   "content": "Notifications with `is_standard = 1` refuse any edit: `ValidationError: Cannot edit Standard Notification. To edit, please disable this and duplicate it`. Even if an edit went through, `bench migrate` would revert a standard record. The route is to disable the standard one and create a custom duplicate with the same document type, event and condition.\n\nA Notification message that uses single braces (`{doc.field_name}`) renders them literally; Jinja placeholders need double braces (`{{ doc.field_name }}`). A message written this way can print the raw placeholder for months unnoticed. Several enabled Notifications can fire on the same event with identical subjects (several notifications on Sales Invoice submit), so a list of enabled notifications per document type shows overlapping or contradictory customer mail before a new sender is added."
+ },
+ {
+  "seed_key": "stylesheet-link-in-mail-html-makes-sendmail-fail",
+  "topic": "bug-fix",
+  "title": "A stylesheet `<link>` in an email's HTML is fetched by `frappe.sendmail`, and a 404 makes the send fail",
+  "content": "Outgoing mail HTML is inlined with Premailer, which loads every `<link rel=\"stylesheet\">` in the message. Before that, links in the message are made absolute against the site URL, so a protocol-relative `//fonts.googleapis.com/css?family=...` becomes `<site URL>//fonts.googleapis.com/css?family=...`, which the site answers with 404. Premailer calls `raise_for_status()`, so `frappe.sendmail` raises `requests.exceptions.HTTPError` while the mail is being queued; an unreachable stylesheet host raises `ConnectionError` the same way.\n\nInbound HTML mail often carries such a tag (a web-font link), so a hook that sends mail containing a received Communication's content (an auto-reply, a forward, a reply that quotes it) fails on a purely cosmetic tag, and an exception raised while a received mail is processed makes the mail sync pick the message up again. Removing `<link>` tags whose text contains `stylesheet` from `doc.content` in a Before Insert Server Script on received Communications avoids it (a string scan, since `re` is unavailable in the sandbox). Communications stored with the tag earlier can still fail when replied to."
  },
  {
   "seed_key": "zero-rate-line-is-filled-from-item-price",

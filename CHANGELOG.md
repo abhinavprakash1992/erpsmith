@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- **13 more seed notes** (109 in all), each checked on Frappe v15 and v16 before shipping: REST updates replacing child tables, Webhook JSON bodies and write-back loops, Notification recipients, `tabSeries` row locks behind 'Server was too busy', Assignment Rule timing, stylesheet links that make `frappe.sendmail` fail, app order for class overrides, `post_model_sync` patches and fixtures, Sales Order dates, Item merges blocked by the accounts-frozen date, and two Scheduler/API script patterns. Existing sites get them on the next `bench migrate`; notes already installed are left as they are.
+
 ## 1.0.0
 
 First release. ERPSmith lets Claude (or any MCP client) build and debug customizations on your ERPNext site, and nothing changes until you approve it. Frappe v15 and v16. Free, MIT.
