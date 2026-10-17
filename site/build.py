@@ -52,6 +52,9 @@ th, td {{ border: 1px solid var(--line); padding: 6px 10px; text-align: left; }}
 .actions {{ display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }}
 .button {{ border: 1px solid var(--line); border-radius: 999px; padding: 10px 20px; color: var(--text); text-decoration: none; font-weight: 600; }}
 .button.primary {{ background: var(--ember); border-color: var(--ember); color: #1a1205; }}
+.demo {{ margin-top: 40px; }}
+.demo video {{ display: block; width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }}
+.demo p {{ color: var(--muted); text-align: center; font-size: 14px; }}
 .steps {{ list-style: none; padding: 0; display: grid; gap: 16px; counter-reset: step; }}
 .steps > li {{ background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px 20px 8px; counter-increment: step; min-width: 0; }}
 .steps h3::before {{ content: counter(step) ". "; color: var(--ember); }}
@@ -117,7 +120,8 @@ def page(name, title, description, body, kind="prose"):
 def main():
 	shutil.rmtree(DIST, ignore_errors=True)
 	DIST.mkdir()
-	shutil.copy(ROOT / "docs" / "assets" / "logo-512.png", DIST / "logo-512.png")
+	for asset in ("logo-512.png", "demo.mp4", "demo-poster.jpg"):
+		shutil.copy(ROOT / "docs" / "assets" / asset, DIST / asset)
 	(DIST / "vercel.json").write_text(json.dumps({"cleanUrls": True}) + "\n")
 
 	readme = (ROOT / "README.md").read_text().split("\n", 1)[1].replace("# ERPSmith\n", "# ERPSmith documentation\n", 1)
